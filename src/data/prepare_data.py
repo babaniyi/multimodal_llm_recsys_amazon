@@ -4,11 +4,12 @@ from pathlib import Path
 import json
 import logging 
 import numpy as np
-
-from src.utils.utils import setup_logging, set_seed, load_config
-import src.data.processor as processor
-
 import tiktoken
+
+from ..utils.utils import setup_logging, set_seed, load_config
+from . import processor
+
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -18,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 # Configure logging
 setup_logging()
-set_seed()
+set_seed(42)
 
 ## TODO: 
 # - Add a function to get the next 10 items for each user
@@ -41,9 +42,10 @@ def main():
     config = load_config()
 
     # Test mode parameters
-    TEST_MODE = config['data_config']['test_mode'].lower()
-    TEST_MODE = json.loads(TEST_MODE)
-    TEST_SIZE = int(config['data_config']['test_size'])   # Number of items to process in test mode
+    TEST_MODE = config['model_config']['test_mode']
+    #TEST_MODE = TEST_MODE.lower()
+    #TEST_MODE = json.loads(TEST_MODE)
+    TEST_SIZE = int(config['model_config']['test_size'])   # Number of items to process in test mode
 
     # Load data
     logger.info("Loading review data...")
@@ -110,9 +112,9 @@ def main():
     #merged_df['parent_asin_original'] = merged_df['parent_asin'].copy()
     merged_df["parent_asin"] = "<|ASIN_" + merged_df["parent_asin"] + "|>"
     #merged_df['input'] = merged_df[review_cols + item_cols].apply(details_to_sentence)
-    merged_df["input"] = merged_df[review_cols + item_cols].apply(lambda x: '\n\n'.join(f"{col.title()}: {value}\n" for col, value in x.items()), axis=1)
+    merged_df["input"] = merged_df[review_cols + item_cols].apply(lambda x: '. '.join(f"{col.title()}: {value}\n" for col, value in x.items()), axis=1)
 
-    merged_df = merged_df.drop(columns=review_cols + item_cols, axis=1)
+   
 
     # > Prepare the data labels: Extract the next items purchased by the user
     labels_df = processor.get_next_items(
@@ -123,6 +125,7 @@ def main():
     join_keys = ["user_id", "parent_asin", "date"]
     merged_df = merged_df.merge(labels_df, on=join_keys, how="inner")
 
+    merged_df = merged_df.drop(columns=review_cols + item_cols, axis=1)
     merged_df = merged_df.drop(columns=["timestamp"], axis=1)
 
     del labels_df
@@ -157,14 +160,15 @@ def main():
     output_filename = "processed_data_test.jsonl" if TEST_MODE else "processed_data.jsonl"
     output_path = processed_dir / output_filename
     processor.save_processed_data(df_model_ready, output_path)
+    logger.info(f"Saved processed data to {output_path}")
 
     # 2.02 Split to train, validation and test
     #_______________________________________________________________________________
     train_df, val_df, test_df = processor.split_data_temporal(
         df_model_ready, 
-        train_ratio=config['data_config']['train_ratio'], 
-        val_ratio=config['data_config']['val_ratio'], 
-        test_ratio=config['data_config']['test_ratio'])
+        train_ratio=config['data_split_ratio']['train_ratio'], 
+        val_ratio=config['data_split_ratio']['val_ratio'], 
+        test_ratio=config['data_split_ratio']['test_ratio'])
 
     train_data = train_df.to_dict(orient="records")
     test_data = test_df.to_dict(orient="records")
@@ -175,22 +179,12 @@ def main():
     processor.save_split_data(train_data, val_data, test_data, str(processed_dir))
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    # Log split statistics
+    logger.info(f"Training set size: {len(train_data)}")
+    logger.info(f"Validation set size: {len(val_data)}")
+    logger.info(f"Test set size: {len(test_data)}")
     
+    logger.info("Data preparation and splitting completed successfully!")
 
 
 

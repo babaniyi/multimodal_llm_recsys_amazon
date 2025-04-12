@@ -93,6 +93,9 @@ data/processed/
 *settings.json
 info.txt
 
+# virtual environment
+mlm_recsys/
+
 
 # Keep the directory structure but ignore contents
 !data/raw/.gitkeep

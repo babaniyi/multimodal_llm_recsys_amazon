@@ -130,14 +130,14 @@ def get_next_items(
             next_items_data.append((
                 user_data.loc[i, 'user_id'],
                 user_data.loc[i, 'parent_asin'],
-                user_data.loc[i, 'timestamp'],
+                user_data.loc[i, 'date'],
                 ", ".join(next_items),
                 "| ".join(next_item_names)
             ))
 
     df_next_items = pd.DataFrame(
         next_items_data,
-        columns=['user_id', 'parent_asin', 'timestamp', 'next_items', 'next_item_names']
+        columns=['user_id', 'parent_asin', 'date', 'next_items', 'next_item_names']
     )
 
     return df_next_items
@@ -217,7 +217,7 @@ def split_data_temporal(df, train_ratio=0.7, val_ratio=0.15, test_ratio=0.15):
     assert train_ratio + val_ratio + test_ratio == 1.0, "Ratios must sum up to 1."
 
     # Sort data by user_id and date to maintain chronological order
-    df_sorted = df.sort_values(by=['date', 'user_id']).reset_index(drop=True)
+    df_sorted = df.sort_values(by=['user_id', 'date']).reset_index(drop=True)
 
     # Create empty DataFrames for train, validation, and test
     train_df = pd.DataFrame()
@@ -251,7 +251,7 @@ def split_data_temporal(df, train_ratio=0.7, val_ratio=0.15, test_ratio=0.15):
     return train_df, val_df, test_df
 
 
-def save_split_data(self, train_data: List[Dict], val_data: List[Dict], test_data: List[Dict], output_dir: str):
+def save_split_data(train_data: List[Dict], val_data: List[Dict], test_data: List[Dict], output_dir: str):
     """
     Save split data to JSON files.
     
