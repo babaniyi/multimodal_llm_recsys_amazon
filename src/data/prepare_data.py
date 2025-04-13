@@ -2,24 +2,20 @@ from tqdm import tqdm
 import logging
 from pathlib import Path
 import json
-import logging 
 import numpy as np
 import tiktoken
+import os
 
 from ..utils.utils import setup_logging, set_seed, load_config
 from . import processor
 
-
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
-
 # Configure logging
 setup_logging()
+logger = logging.getLogger(__name__)
 set_seed(42)
+
+# Test the logger
+logger.info("Starting data preparation script")
 
 ## TODO: 
 # - Add a function to get the next 10 items for each user
@@ -177,6 +173,18 @@ def main():
     del train_df, val_df, test_df
 
     processor.save_split_data(train_data, val_data, test_data, str(processed_dir))
+
+    special_user_item_ids_path = processed_dir / "special_user_item_ids.json"
+    end_of_text_id_path = processed_dir / "end_of_text_id.json"
+    
+    
+    with open(special_user_item_ids_path, "w") as f:
+        json.dump(list(special_user_item_ids), f)
+    logger.info(f"Saved special_user_item_ids to {special_user_item_ids_path}")
+
+    with open(end_of_text_id_path, "w") as f:
+        json.dump(int(end_of_text_id), f)
+    logger.info(f"Saved end_of_text_id to {end_of_text_id_path}")
 
 
     # Log split statistics

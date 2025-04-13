@@ -435,6 +435,8 @@ def save_processed_data(data: pd.DataFrame, output_path: Union[str, Path]):
 
 
 
+# MULTIMODAL PROCESSOR:
+# ==========================================
 
 class ImageEncoder:
     def __init__(self, image_size: int = 224):
@@ -520,40 +522,44 @@ class ImageEncoder:
                 return pooled_output
 
 
+def custom_collate_fn(
+    batch,
+    pad_token_id=None,
+    ignore_index=-100,
+    allowed_max_length=None,
+    device="cpu"
+    ):
+    # Find the longest sequence in the batch
+    batch_max_length = max(len(item)+1 for item in batch)
 
-## MODEL UTILITIES:
-# ==========================================
+    # Pad and prepare inputs and targets
+    inputs_lst, targets_lst = [], []
 
-class LinearWithLoRA(torch.nn.Module):
-    def __init__(self, linear, rank, alpha):
-        super().__init__()
-        self.linear = linear
-        self.lora = LoRALayer(
-            linear.in_features, linear.out_features, rank, alpha
-        )
+    for item in batch:
+        new_item = item.copy()
+        # Add an <|endoftext|> token
+        new_item += [pad_token_id]
+        # Pad sequences to max_length
+        padded = new_item + [pad_token_id] * (batch_max_length - len(new_item))
+        inputs = torch.tensor(padded[:-1])  # Truncate the last token for inputs
+        targets = torch.tensor(padded[1:])  # Shift +1 to the right for targets
 
-    def forward(self, x):
-        return self.linear(x) + self.lora(x)
+        # New: Replace all but the first padding tokens in targets by ignore_index
+        mask = targets == pad_token_id
+        indices = torch.nonzero(mask).squeeze()
+        if indices.numel() > 1:
+            targets[indices[1:]] = ignore_index
 
+        # New: Optionally truncate to maximum sequence length
+        if allowed_max_length is not None:
+            inputs = inputs[:allowed_max_length]
+            targets = targets[:allowed_max_length]
 
-class LoRALayer(torch.nn.Module):
-    def __init__(self, in_dim, out_dim, rank, alpha):
-        super().__init__()
-        self.A = torch.nn.Parameter(torch.empty(in_dim, rank))
-        torch.nn.init.kaiming_uniform_(self.A, a=math.sqrt(5))  # similar to standard weight initialization
-        self.B = torch.nn.Parameter(torch.zeros(rank, out_dim))
-        self.alpha = alpha
+        inputs_lst.append(inputs)
+        targets_lst.append(targets)
 
-    def forward(self, x):
-        x = self.alpha * (x @ self.A @ self.B)
-        return x
+    # Convert list of inputs and targets to tensors and transfer to target device
+    inputs_tensor = torch.stack(inputs_lst).to(device)
+    targets_tensor = torch.stack(targets_lst).to(device)
 
-
-def replace_linear_with_lora(model, rank, alpha):
-    for name, module in model.named_children():
-        if isinstance(module, torch.nn.Linear):
-            # Replace the Linear layer with LinearWithLoRA
-            setattr(model, name, LinearWithLoRA(module, rank, alpha))
-        else:
-            # Recursively apply the same function to child modules
-            replace_linear_with_lora(module, rank, alpha)
+    return inputs_tensor, targets_tensor

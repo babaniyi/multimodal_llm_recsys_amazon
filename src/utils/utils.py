@@ -17,15 +17,30 @@ def setup_logging(log_dir: str = "logs") -> None:
     # Create log directory if it doesn't exist
     os.makedirs(log_dir, exist_ok=True)
     
-    # Configure logging
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        handlers=[
-            logging.FileHandler(os.path.join(log_dir, "train.log")),
-            logging.StreamHandler()
-        ]
-    )
+    # Get the root logger
+    logger = logging.getLogger()
+    logger.setLevel(logging.INFO)
+    
+    # Remove any existing handlers
+    for handler in logger.handlers[:]:
+        logger.removeHandler(handler)
+    
+    # Create formatters
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    
+    # Create and add file handler
+    log_file = os.path.join(log_dir, "train.log")
+    file_handler = logging.FileHandler(log_file, mode='a')  # 'a' for append mode
+    file_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
+    
+    # Create and add console handler
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(formatter)
+    logger.addHandler(console_handler)
+    
+    # Log a test message
+    logger.info("Logging system initialized")
 
 def set_seed(seed: int) -> None:
     """
