@@ -297,8 +297,8 @@ def process_review_data(review_data: List[Dict]) -> pd.DataFrame:
             'review_text': review.get('text', ''),
             'review_title': review.get('title', ''),
             'timestamp': review.get('timestamp'),
-            'verified_purchase': review.get('verified_purchase', False),
-            'helpful_votes': review.get('helpful_vote', 0)
+            #'verified_purchase': review.get('verified_purchase', False),
+            #'helpful_votes': review.get('helpful_vote', 0)
         } # [user_id, parent_asin, rating, review_text, review_title, timestamp, verified_purchase, helpful_votes]
         processed_data.append(processed_review)
     return pd.DataFrame(processed_data)
@@ -391,12 +391,12 @@ def process_metadata(metadata: List[Dict], cache_dir: Path) -> pd.DataFrame:
             'title': item.get('title', ''),
             #'description': ' '.join(item.get('description', [])),
             #'features': ' '.join(item.get('features', [])),
-            'price': item.get('price'),
+            #'price': item.get('price'),
             'main_category': item.get('main_category'),
             #'average_rating': item.get('average_rating'),
             #'rating_number': item.get('rating_number'),
-            'store': item.get('store'),
-            'brand': item.get('details', {}).get('Brand', ''),
+            #'store': item.get('store'),
+            #'brand': item.get('details', {}).get('Brand', ''),
             'image_url': main_image_url,
             'local_image_path': local_image_path
         }# ['parent_asin', 'title', 'price', 'main_category', 'store', 'brand', 'image_url', 'local_image_path']
@@ -439,18 +439,18 @@ def save_processed_data(data: pd.DataFrame, output_path: Union[str, Path]):
 # ==========================================
 
 class ImageEncoder:
-    def __init__(self, image_size: int = 224):
+    def __init__(self, image_size: int = 224, vision_model_name: str = "google/mobilenet_v2_1.0_224"):
         """
         Initialize the multi-modal processor for handling both text and image data.
-        
         Args:
             image_size (int): Size to resize images to
         """
         self.image_size = image_size
         
         # Initialize image processor and model
-        self.image_processor = AutoImageProcessor.from_pretrained("microsoft/resnet-50")
-        self.vision_model = AutoModel.from_pretrained("microsoft/resnet-50")
+        self.image_processor = AutoImageProcessor.from_pretrained(vision_model_name, use_fast=True)
+        #self.image_processor = AutoImageProcessor.from_pretrained("microsoft/resnet-50")
+        self.vision_model = AutoModel.from_pretrained(vision_model_name)
 
         # Image transformation pipeline
         self.transform = transforms.Compose([
@@ -502,24 +502,14 @@ class ImageEncoder:
         #     outputs = self.vision_model(image_tensor.unsqueeze(0))
         #     return outputs.last_hidden_state.mean(dim=1)
 
+        # WORKING: with good output
         with torch.no_grad():
             # Get the output from the vision model
             outputs = self.vision_model(image_tensor.unsqueeze(0))
             
-            # ResNet-50 outputs a 7x7 feature map in the last hidden state
-            # We need to get the final pooling layer output
-            if hasattr(self.vision_model, 'avgpool'):
-                # If we have access to the pooling layer, use it
-                pooled_output = self.vision_model.avgpool(outputs.last_hidden_state)
-                # Flatten the output
-                flattened_output = torch.flatten(pooled_output, 1)
-                return flattened_output
-            else:
-                # If we don't have direct access to the pooling layer,
-                # use global average pooling on the last hidden state
-                # Shape: [batch_size, 7, 7, channels]
-                pooled_output = torch.mean(outputs.last_hidden_state, dim=[2, 3])
-                return pooled_output
+            # Apply average pooling to reduce the size of the embeddings
+            pooled_output = torch.mean(outputs.last_hidden_state, dim=[2, 3])
+            return pooled_output
 
 
 def custom_collate_fn(
@@ -541,8 +531,17 @@ def custom_collate_fn(
         new_item += [pad_token_id]
         # Pad sequences to max_length
         padded = new_item + [pad_token_id] * (batch_max_length - len(new_item))
-        inputs = torch.tensor(padded[:-1])  # Truncate the last token for inputs
-        targets = torch.tensor(padded[1:])  # Shift +1 to the right for targets
+        
+        # Flatten padded if it contains any lists
+        flattened = []
+        for x in padded:
+            if isinstance(x, list):
+                flattened.extend(x)
+            else:
+                flattened.append(x if x is not None else 0)
+                
+        inputs = torch.tensor(flattened[:-1], dtype=torch.long)  # Truncate the last token for inputs
+        targets = torch.tensor(flattened[1:], dtype=torch.long)  # Shift +1 to the right for targets
 
         # New: Replace all but the first padding tokens in targets by ignore_index
         mask = targets == pad_token_id

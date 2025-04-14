@@ -99,8 +99,8 @@ def main():
 
     #cols_to_drop = ["timestamp", "parent_asin", "user_id", "details", "local_image_path"]
     
-    review_cols = ["rating", "review_text", "review_title", "verified_purchase", "helpful_votes"]
-    item_cols = ['title', 'price', 'main_category', 'store', 'brand',]
+    review_cols = ["review_text"]
+    item_cols = []
     
     merged_df["date"] = processor.cast_unix_to_date(merged_df["timestamp"])
 
@@ -108,7 +108,7 @@ def main():
     #merged_df['parent_asin_original'] = merged_df['parent_asin'].copy()
     merged_df["parent_asin"] = "<|ASIN_" + merged_df["parent_asin"] + "|>"
     #merged_df['input'] = merged_df[review_cols + item_cols].apply(details_to_sentence)
-    merged_df["input"] = merged_df[review_cols + item_cols].apply(lambda x: '. '.join(f"{col.title()}: {value}\n" for col, value in x.items()), axis=1)
+    merged_df["input"] = merged_df[review_cols + item_cols].apply(lambda x: '\n'.join(f"{col.title()}: {value} <|endoftext|>" for col, value in x.items()), axis=1)
 
    
 
@@ -120,6 +120,16 @@ def main():
     
     join_keys = ["user_id", "parent_asin", "date"]
     merged_df = merged_df.merge(labels_df, on=join_keys, how="inner")
+
+    #_________
+    # Save parent_asin and product title to JSON
+    parent_asin_title_path = processed_dir / "parent_asin_title.json"
+    parent_asin_title_data = merged_df[['parent_asin', 'title']].to_dict(orient='records')
+    with open(parent_asin_title_path, 'w') as f:
+        json.dump(parent_asin_title_data, f)
+    logger.info(f"Saved parent_asin and product title to {parent_asin_title_path}")
+
+    #__________
 
     merged_df = merged_df.drop(columns=review_cols + item_cols, axis=1)
     merged_df = merged_df.drop(columns=["timestamp"], axis=1)
@@ -134,10 +144,10 @@ def main():
     special_user_item_ids = ["<|endoftext|>"] + merged_df["parent_asin"].unique().tolist()
     special_user_item_ids = set(special_user_item_ids)
 
-    tokenizer = tiktoken.get_encoding("gpt2")   
+    #tokenizer = tiktoken.get_encoding("gpt2")   
 
     # Add special tokens to the tokenizer
-    end_of_text_id = np.array(tokenizer.encode("<|endoftext|>", allowed_special=special_user_item_ids)).item()
+    #end_of_text_id = np.array(tokenizer.encode("<|endoftext|>", allowed_special=special_user_item_ids)).item()
 
 
     # 2. DATA PREP - Data Loaders, Custom collate, etc.
@@ -174,17 +184,12 @@ def main():
 
     processor.save_split_data(train_data, val_data, test_data, str(processed_dir))
 
-    special_user_item_ids_path = processed_dir / "special_user_item_ids.json"
-    end_of_text_id_path = processed_dir / "end_of_text_id.json"
-    
+    special_user_item_ids_path = processed_dir / "special_user_item_ids.json"    
     
     with open(special_user_item_ids_path, "w") as f:
         json.dump(list(special_user_item_ids), f)
     logger.info(f"Saved special_user_item_ids to {special_user_item_ids_path}")
 
-    with open(end_of_text_id_path, "w") as f:
-        json.dump(int(end_of_text_id), f)
-    logger.info(f"Saved end_of_text_id to {end_of_text_id_path}")
 
 
     # Log split statistics

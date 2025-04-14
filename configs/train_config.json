@@ -3,15 +3,14 @@
         "model_name": "gpt2-medium (355M)",
         "vocab_size": 50257,
         "context_length": 1024,
-        "drop_rate": 0.0,
+        "drop_rate": 0.01,
         "qkv_bias": true,
         "num_layers": 6,
         "num_heads": 8,
         "d_model": 768,
         "max_seq_len": 512,
-        "dropout": 0.1,
+        "dropout": 0.01,
         "image_embedding_dim": 2048,
-        "fusion_type": "concat",
         "test_mode": true,
         "test_size": 200
     },
@@ -23,15 +22,15 @@
         "cache_dir": "data/processed/image_cache",
         "batch_size": 4,
         "gradient_accumulation_steps": 8,
-        "num_workers": 2,
+        "num_workers": 0,
         "pin_memory": true,
         "number_of_items_to_predict": 10,
         "min_interactions": 3,
-        "user_prompt": "Given a user's purchase history and review for a product, predict the next products they would likely purchase. Base your prediction on the user's preferences and product characteristics."
+        "user_prompt": "Given a user's purchase history and review for a product, predict the next 10 products they would likely purchase. "
     },
     "training_config": {
         "num_epochs": 5,
-        "learning_rate": 5e-5,
+        "learning_rate": 5e-6,
         "min_learning_rate": 1e-6,
         "weight_decay": 0.1,
         "max_grad_norm": 1.0,
@@ -46,7 +45,13 @@
         "prompt_template": "phi3",
         "lora": true,
         "lora_rank": 8,
-        "lora_alpha": 0.5
+        "lora_alpha": 0.5,
+        "eval_freq": 5,
+        "eval_iter": 5,
+        "temperature": 0.5,
+        "top_k": 20,
+        "top_p": 0.8,
+        "max_new_tokens": 100
     },
     "checkpoint_dir": "checkpoints",
     "data_split_ratio": {
@@ -63,6 +68,6 @@
     "custom_config": {
         "phi3": true, 
         "alpaca": false,
-        "lora": true
+        "lora": false
     }
 } 

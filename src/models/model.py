@@ -7,9 +7,15 @@ import tiktoken
 import torch
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
-from torch import autocast, GradScaler
+from torch import autocast
+from torch.cuda.amp import GradScaler
 import gc
 import math
+import logging
+import torch.cuda.amp as amp
+import os
+
+logger = logging.getLogger(__name__)
 
 class MultiHeadAttention(nn.Module):
     def __init__(self, d_in, d_out, context_length, dropout, num_heads, qkv_bias=False):
@@ -150,6 +156,20 @@ class GPTModel(nn.Module):
 
         self.final_norm = LayerNorm(cfg["emb_dim"])
         self.out_head = nn.Linear(cfg["emb_dim"], cfg["vocab_size"], bias=False)
+        
+        # Enable gradient checkpointing by default
+        self.gradient_checkpointing = False
+
+        # Enable memory efficient attention
+        self.use_memory_efficient_attention = True
+
+    def gradient_checkpointing_enable(self):
+        """Enable gradient checkpointing."""
+        self.gradient_checkpointing = True
+
+    def gradient_checkpointing_disable(self):
+        """Disable gradient checkpointing."""
+        self.gradient_checkpointing = False
 
     def forward(self, in_idx):
         batch_size, seq_len = in_idx.shape
@@ -157,12 +177,31 @@ class GPTModel(nn.Module):
         pos_embeds = self.pos_emb(torch.arange(seq_len, device=in_idx.device))
         x = tok_embeds + pos_embeds  # Shape [batch_size, num_tokens, emb_size]
         x = self.drop_emb(x)
-        x = self.trf_blocks(x)
+        
+        # Apply gradient checkpointing if enabled
+        if self.gradient_checkpointing:
+            def create_custom_forward(module):
+                def custom_forward(*inputs):
+                    return module(inputs[0])
+                return custom_forward
+            
+            # Process each transformer block with checkpointing
+            for block in self.trf_blocks:
+                x = torch.utils.checkpoint.checkpoint(
+                    create_custom_forward(block),
+                    x,
+                    use_reentrant=False,  # More stable but slightly slower
+                    preserve_rng_state=False  # Save memory by not preserving RNG state
+                )
+        else:
+            x = self.trf_blocks(x)
+            
         x = self.final_norm(x)
         logits = self.out_head(x)
         return logits
 
 
+        
 def generate_text_simple(model, idx, max_new_tokens, context_size):
     # idx is (B, T) array of indices in the current context
     for _ in range(max_new_tokens):
@@ -189,49 +228,65 @@ def generate_text_simple(model, idx, max_new_tokens, context_size):
     return idx
 
 
-def generate(model, idx, max_new_tokens, context_size, temperature=0.0, top_k=None, eos_id=None):
-
-    # For-loop is the same as before: Get logits, and only focus on last time step
+def generate(model, idx, max_new_tokens, context_size, eos_id=None, temperature=1.0, top_k=None, top_p=1.0, repetition_penalty=1.0):
+    """Generate text with improved sampling parameters."""
+    model.eval()
     for _ in range(max_new_tokens):
+        # Crop idx to the last context_size tokens
         idx_cond = idx[:, -context_size:]
+        
+        # Get the predictions
         with torch.no_grad():
             logits = model(idx_cond)
-        logits = logits[:, -1, :]
-
-        # New: Filter logits with top_k sampling
+        
+        # Focus only on the last time step
+        logits = logits[:, -1, :] / temperature
+        
+        # Apply repetition penalty
+        if repetition_penalty != 1.0:
+            for i in range(idx.size(1)):
+                logits[:, idx[0, i]] /= repetition_penalty
+        
+        # Apply top-k filtering
         if top_k is not None:
-            # Keep only top_k values
-            top_logits, _ = torch.topk(logits, top_k)
-            min_val = top_logits[:, -1]
-            logits = torch.where(logits < min_val, torch.tensor(float('-inf')).to(logits.device), logits)
-
-        # New: Apply temperature scaling
-        if temperature > 0.0:
-            logits = logits / temperature
-
-            # Apply softmax to get probabilities
-            probs = torch.softmax(logits, dim=-1)  # (batch_size, context_len)
-
-            # Sample from the distribution
-            idx_next = torch.multinomial(probs, num_samples=1)  # (batch_size, 1)
-
-        # Otherwise same as before: get idx of the vocab entry with the highest logits value
-        else:
-            idx_next = torch.argmax(logits, dim=-1, keepdim=True)  # (batch_size, 1)
-
-        if idx_next == eos_id:  # Stop generating early if end-of-sequence token is encountered and eos_id is specified
+            v, _ = torch.topk(logits, min(top_k, logits.size(-1)))
+            logits[logits < v[:, [-1]]] = -float('Inf')
+        
+        # Apply nucleus sampling
+        if top_p < 1.0:
+            sorted_logits, sorted_indices = torch.sort(logits, descending=True)
+            cumulative_probs = torch.cumsum(torch.nn.functional.softmax(sorted_logits, dim=-1), dim=-1)
+            
+            # Remove tokens with cumulative probability above the threshold
+            sorted_indices_to_remove = cumulative_probs > top_p
+            # Shift the indices to the right to keep also the first token above the threshold
+            sorted_indices_to_remove[..., 1:] = sorted_indices_to_remove[..., :-1].clone()
+            sorted_indices_to_remove[..., 0] = 0
+            
+            indices_to_remove = sorted_indices_to_remove.scatter(1, sorted_indices, sorted_indices_to_remove)
+            logits[indices_to_remove] = -float('Inf')
+        
+        # Apply softmax to get probabilities
+        probs = torch.nn.functional.softmax(logits, dim=-1)
+        
+        # Sample from the distribution
+        idx_next = torch.multinomial(probs, num_samples=1)
+        
+        # Append sampled index to the running sequence
+        idx = torch.cat((idx, idx_next), dim=1)
+        
+        # Stop if we predict the end of sequence token
+        if eos_id is not None and idx_next.item() == eos_id:
             break
-
-        # Same as before: append sampled index to the running sequence
-        idx = torch.cat((idx, idx_next), dim=1)  # (batch_size, num_tokens+1)
-
+    
     return idx
-
 
 
 def train_model_simple(model, train_loader, val_loader, optimizer, device, num_epochs,
                        eval_freq, eval_iter, start_context, tokenizer, special_chars=None
                        ):
+    # First version of the train model
+    # Downside: It is slow and consumes lots of memory
 
     scaler = GradScaler(device)  # Initialize the gradient scaler for mixed precision
     train_losses, val_losses, track_tokens_seen = [], [], []
@@ -291,76 +346,21 @@ def evaluate_model(model, train_loader, val_loader, device, eval_iter):
     return train_loss, val_loss
 
 
+def generate_and_print_sample(model, tokenizer, device, start_context, special_chars=None):
+    model.eval()
+    context_size = model.pos_emb.weight.shape[0]
+    encoded = text_to_token_ids(start_context, tokenizer, special_chars).to(device)
+    with torch.no_grad():
+        token_ids = generate_text_simple(
+            model=model, idx=encoded,
+            max_new_tokens=50, context_size=context_size
+        )
+        decoded_text = token_ids_to_text(token_ids, tokenizer)
+        print(decoded_text.replace("\n", " "))  # Compact print format
+    model.train()
 
 
-def assign(left, right):
-    if left.shape != right.shape:
-        raise ValueError(f"Shape mismatch. Left: {left.shape}, Right: {right.shape}")
-    return torch.nn.Parameter(torch.tensor(right))
-
-
-def load_weights_into_gpt(gpt, params):
-    gpt.pos_emb.weight = assign(gpt.pos_emb.weight, params['wpe'])
-    gpt.tok_emb.weight = assign(gpt.tok_emb.weight, params['wte'])
-
-    for b in range(len(params["blocks"])):
-        q_w, k_w, v_w = np.split(
-            (params["blocks"][b]["attn"]["c_attn"])["w"], 3, axis=-1)
-        gpt.trf_blocks[b].att.W_query.weight = assign(
-            gpt.trf_blocks[b].att.W_query.weight, q_w.T)
-        gpt.trf_blocks[b].att.W_key.weight = assign(
-            gpt.trf_blocks[b].att.W_key.weight, k_w.T)
-        gpt.trf_blocks[b].att.W_value.weight = assign(
-            gpt.trf_blocks[b].att.W_value.weight, v_w.T)
-
-        q_b, k_b, v_b = np.split(
-            (params["blocks"][b]["attn"]["c_attn"])["b"], 3, axis=-1)
-        gpt.trf_blocks[b].att.W_query.bias = assign(
-            gpt.trf_blocks[b].att.W_query.bias, q_b)
-        gpt.trf_blocks[b].att.W_key.bias = assign(
-            gpt.trf_blocks[b].att.W_key.bias, k_b)
-        gpt.trf_blocks[b].att.W_value.bias = assign(
-            gpt.trf_blocks[b].att.W_value.bias, v_b)
-
-        gpt.trf_blocks[b].att.out_proj.weight = assign(
-            gpt.trf_blocks[b].att.out_proj.weight,
-            params["blocks"][b]["attn"]["c_proj"]["w"].T)
-        gpt.trf_blocks[b].att.out_proj.bias = assign(
-            gpt.trf_blocks[b].att.out_proj.bias,
-            params["blocks"][b]["attn"]["c_proj"]["b"])
-
-        gpt.trf_blocks[b].ff.layers[0].weight = assign(
-            gpt.trf_blocks[b].ff.layers[0].weight,
-            params["blocks"][b]["mlp"]["c_fc"]["w"].T)
-        gpt.trf_blocks[b].ff.layers[0].bias = assign(
-            gpt.trf_blocks[b].ff.layers[0].bias,
-            params["blocks"][b]["mlp"]["c_fc"]["b"])
-        gpt.trf_blocks[b].ff.layers[2].weight = assign(
-            gpt.trf_blocks[b].ff.layers[2].weight,
-            params["blocks"][b]["mlp"]["c_proj"]["w"].T)
-        gpt.trf_blocks[b].ff.layers[2].bias = assign(
-            gpt.trf_blocks[b].ff.layers[2].bias,
-            params["blocks"][b]["mlp"]["c_proj"]["b"])
-
-        gpt.trf_blocks[b].norm1.scale = assign(
-            gpt.trf_blocks[b].norm1.scale,
-            params["blocks"][b]["ln_1"]["g"])
-        gpt.trf_blocks[b].norm1.shift = assign(
-            gpt.trf_blocks[b].norm1.shift,
-            params["blocks"][b]["ln_1"]["b"])
-        gpt.trf_blocks[b].norm2.scale = assign(
-            gpt.trf_blocks[b].norm2.scale,
-            params["blocks"][b]["ln_2"]["g"])
-        gpt.trf_blocks[b].norm2.shift = assign(
-            gpt.trf_blocks[b].norm2.shift,
-            params["blocks"][b]["ln_2"]["b"])
-
-    gpt.final_norm.scale = assign(gpt.final_norm.scale, params["g"])
-    gpt.final_norm.shift = assign(gpt.final_norm.shift, params["b"])
-    gpt.out_head.weight = assign(gpt.out_head.weight, params["wte"])
-
-
-def text_to_token_ids(text, tokenizer, special_chars=None):
+def text_to_token_ids(text, tokenizer, special_chars):
     encoded = tokenizer.encode(text, allowed_special=special_chars)
     encoded_tensor = torch.tensor(encoded).unsqueeze(0)  # add batch dimension
     return encoded_tensor
@@ -372,9 +372,29 @@ def token_ids_to_text(token_ids, tokenizer):
 
 
 def calc_loss_batch(input_batch, target_batch, model, device):
-    input_batch, target_batch = input_batch.to(device), target_batch.to(device)
+    """Calculate loss for a batch of data."""
+    input_batch = input_batch.to(device)
+    target_batch = target_batch.to(device)
+    
+    # Forward pass
     logits = model(input_batch)
-    loss = torch.nn.functional.cross_entropy(logits.flatten(0, 1), target_batch.flatten())
+
+    # Check for NaN or Inf values in inputs and outputs
+    if torch.isnan(input_batch).any() or torch.isinf(input_batch).any():
+        logger.error("NaN or Inf detected in input batch")
+    if torch.isnan(logits).any() or torch.isinf(logits).any():
+        logger.error("NaN or Inf detected in logits")
+    
+    # Calculate loss
+    loss = torch.nn.functional.cross_entropy(
+        logits.flatten(0, 1),
+        target_batch.flatten()
+    )
+
+    # Check for NaN or Inf values in loss
+    if torch.isnan(loss).any() or torch.isinf(loss).any():
+        logger.error("NaN or Inf detected in loss")
+    
     return loss
 
 
@@ -398,24 +418,162 @@ def calc_loss_loader(data_loader, model, device, num_batches=None):
     return total_loss / num_batches
 
 
-def plot_losses(epochs_seen, tokens_seen, train_losses, val_losses):
-    fig, ax1 = plt.subplots(figsize=(5, 3))
 
-    # Plot training and validation loss against epochs
-    ax1.plot(epochs_seen, train_losses, label="Training loss")
-    ax1.plot(epochs_seen, val_losses, linestyle="-.", label="Validation loss")
-    ax1.set_xlabel("Epochs")
-    ax1.set_ylabel("Loss")
-    ax1.legend(loc="upper right")
 
-    # Create a second x-axis for tokens seen
-    ax2 = ax1.twiny()  # Create a second x-axis that shares the same y-axis
-    ax2.plot(tokens_seen, train_losses, alpha=0)  # Invisible plot for aligning ticks
-    ax2.set_xlabel("Tokens seen")
+# MODELS:
+def assign_check(left, right):
+    if left.shape != right.shape:
+        raise ValueError(f"Shape mismatch. Left: {left.shape}, Right: {right.shape}")
+    return torch.nn.Parameter(right.clone().detach())
 
-    fig.tight_layout()  # Adjust layout to make room
-    plt.savefig("loss-plot.pdf")
-    plt.show()
+def load_weights(gpt, gpt_hf, BASE_CONFIG):
+
+    d = gpt_hf.state_dict()
+
+    gpt.pos_emb.weight = assign_check(gpt.pos_emb.weight, d["wpe.weight"])
+    gpt.tok_emb.weight = assign_check(gpt.tok_emb.weight, d["wte.weight"])
+    
+    for b in range(BASE_CONFIG["n_layers"]):
+        q_w, k_w, v_w = np.split(d[f"h.{b}.attn.c_attn.weight"], 3, axis=-1)
+        gpt.trf_blocks[b].att.W_query.weight = assign_check(gpt.trf_blocks[b].att.W_query.weight, q_w.T)
+        gpt.trf_blocks[b].att.W_key.weight = assign_check(gpt.trf_blocks[b].att.W_key.weight, k_w.T)
+        gpt.trf_blocks[b].att.W_value.weight = assign_check(gpt.trf_blocks[b].att.W_value.weight, v_w.T)
+    
+        q_b, k_b, v_b = np.split(d[f"h.{b}.attn.c_attn.bias"], 3, axis=-1)
+        gpt.trf_blocks[b].att.W_query.bias = assign_check(gpt.trf_blocks[b].att.W_query.bias, q_b)
+        gpt.trf_blocks[b].att.W_key.bias = assign_check(gpt.trf_blocks[b].att.W_key.bias, k_b)
+        gpt.trf_blocks[b].att.W_value.bias = assign_check(gpt.trf_blocks[b].att.W_value.bias, v_b)
+    
+    
+        gpt.trf_blocks[b].att.out_proj.weight = assign_check(gpt.trf_blocks[b].att.out_proj.weight, d[f"h.{b}.attn.c_proj.weight"].T)
+        gpt.trf_blocks[b].att.out_proj.bias = assign_check(gpt.trf_blocks[b].att.out_proj.bias, d[f"h.{b}.attn.c_proj.bias"])
+    
+        gpt.trf_blocks[b].ff.layers[0].weight = assign_check(gpt.trf_blocks[b].ff.layers[0].weight, d[f"h.{b}.mlp.c_fc.weight"].T)
+        gpt.trf_blocks[b].ff.layers[0].bias = assign_check(gpt.trf_blocks[b].ff.layers[0].bias, d[f"h.{b}.mlp.c_fc.bias"])
+        gpt.trf_blocks[b].ff.layers[2].weight = assign_check(gpt.trf_blocks[b].ff.layers[2].weight, d[f"h.{b}.mlp.c_proj.weight"].T)
+        gpt.trf_blocks[b].ff.layers[2].bias = assign_check(gpt.trf_blocks[b].ff.layers[2].bias, d[f"h.{b}.mlp.c_proj.bias"])
+    
+        gpt.trf_blocks[b].norm1.scale = assign_check(gpt.trf_blocks[b].norm1.scale, d[f"h.{b}.ln_1.weight"])
+        gpt.trf_blocks[b].norm1.shift = assign_check(gpt.trf_blocks[b].norm1.shift, d[f"h.{b}.ln_1.bias"])
+        gpt.trf_blocks[b].norm2.scale = assign_check(gpt.trf_blocks[b].norm2.scale, d[f"h.{b}.ln_2.weight"])
+        gpt.trf_blocks[b].norm2.shift = assign_check(gpt.trf_blocks[b].norm2.shift, d[f"h.{b}.ln_2.bias"])
+    
+        gpt.final_norm.scale = assign_check(gpt.final_norm.scale, d["ln_f.weight"])
+        gpt.final_norm.shift = assign_check(gpt.final_norm.shift, d["ln_f.bias"])
+        gpt.out_head.weight = assign_check(gpt.out_head.weight, d["wte.weight"])
+
+
+def train_model(model, train_loader, val_loader, optimizer, scheduler, device, config, logger, start_context=None, tokenizer=None, special_chars=None):
+    """Train the model with memory optimizations and tracking"""
+    # Initialize mixed precision training
+    scaler = amp.GradScaler()
+    train_losses, val_losses, track_tokens_seen = [], [], []
+    tokens_seen, global_step = 0, -1
+
+    # Enable gradient checkpointing at model level
+    model.gradient_checkpointing_enable()
+    
+    # Set environment variable for better memory management
+    os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'expandable_segments:True'
+
+    torch.backends.cuda.matmul.allow_tf32 = True  # Enable TF32 for faster computation
+    torch.backends.cudnn.benchmark = True  # Enable cuDNN benchmarking
+
+    
+    for epoch in range(config['training_config']['num_epochs']):
+        model.train()
+        
+        for input_batch, target_batch in train_loader:
+            # Clear CUDA cache periodically
+            #if global_step % 5 == 0:
+            #    torch.cuda.empty_cache()
+            #    gc.collect()
+
+            if torch.isnan(input_batch).any() or torch.isinf(input_batch).any():
+                logger.warning("NaN or Inf detected in input batch, skipping this batch.")
+                continue  # Skip this batch
+
+            optimizer.zero_grad()
+            
+            # Use autocast to reduce memory usage with mixed precision
+            if device == "cuda":
+                with autocast(device_type="cuda"):
+                    # Check for NaN or Inf in input batch
+                    if torch.isnan(input_batch).any() or torch.isinf(input_batch).any():
+                        logger.error("NaN or Inf detected in input batch")
+                        continue
+                    # Forward pass
+                    outputs = calc_loss_batch(input_batch, target_batch, model, device)
+
+                    # Add detailed logging for debugging
+                    #logger.debug(f"Batch input IDs: {input_batch}")
+                    #logger.debug(f"Batch attention mask: {target_batch}")
+                    #logger.debug(f"Batch labels: {target_batch}")
+                    #logger.debug(f"Batch image embeddings: {input_batch}")
+
+                    # Check for NaN or Inf in model's output (logits)
+                    if torch.isnan(outputs).any() or torch.isinf(outputs).any():
+                        logger.error("NaN or Inf detected in model's output (logits), skipping this batch.")
+                        continue  # Skip this batch
+
+                    # Calculate loss
+                    loss = outputs
+            else:
+                with autocast(device_type="cpu"):
+                    if torch.isnan(input_batch).any() or torch.isinf(input_batch).any():
+                        logger.error("NaN or Inf detected in input batch")
+                        continue
+                    # Forward pass
+                    outputs = calc_loss_batch(input_batch, target_batch, model, device)
+
+                    # Check for NaN or Inf in model's output (logits)
+                    if torch.isnan(outputs).any() or torch.isinf(outputs).any():
+                        logger.error("NaN or Inf detected in model's output (logits), skipping this batch.")
+                        continue  # Skip this batch
+
+                    # Calculate loss
+                    loss = outputs
+
+            # Scale the loss and call backward() with the scaler
+            scaler.scale(loss).backward()
+
+            # Clip gradients to prevent exploding gradients
+            scaler.unscale_(optimizer)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+            
+            # Update model weights using the scaler
+            scaler.step(optimizer)
+            scaler.update()
+            
+            tokens_seen += input_batch.numel()
+            global_step += 1
+            
+            if global_step % config['training_config']['eval_freq'] == 0:
+                train_loss, val_loss = evaluate_model(
+                    model, train_loader, val_loader, device, config['training_config']['eval_iter'])
+                train_losses.append(train_loss)
+                val_losses.append(val_loss)
+                track_tokens_seen.append(tokens_seen)
+                logger.info(f"Ep {epoch+1} (Step {global_step:06d}): "
+                          f"Train loss {train_loss:.3f}, Val loss {val_loss:.3f}")
+                
+                # Update learning rate using scheduler
+                if scheduler:
+                    scheduler.step(val_loss)
+        
+        # Generate sample after each epoch
+        if start_context and tokenizer:
+            generate_and_print_sample(
+                model, tokenizer, device, start_context, special_chars
+            )
+        
+        # Clear GPU cache after each epoch
+        if device == "cuda":
+            torch.cuda.empty_cache()
+            gc.collect()
+    
+    return model, train_losses, val_losses, track_tokens_seen
+
 
 
 class LinearWithLoRA(torch.nn.Module):

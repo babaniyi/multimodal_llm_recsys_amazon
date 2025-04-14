@@ -10,6 +10,33 @@ import urllib.request
 import time
 from tqdm import tqdm
 import re
+import multiprocessing
+import torch.multiprocessing as mp
+import torch.cuda.amp as amp
+from torch import autocast
+import numpy as np
+import gc
+import sys
+
+from transformers.models.gpt2 import GPT2Model
+
+from ..models.model import assign_check, load_weights, train_model
+
+# Set multiprocessing start method to 'spawn'
+multiprocessing.set_start_method('spawn', force=True)
+
+# Enable gradient checkpointing
+torch.backends.cudnn.benchmark = True
+torch.backends.cudnn.deterministic = True
+
+def clear_cuda_cache():
+    """Clear CUDA cache to free up memory"""
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+
+# CHANGES:
+# - model/ calc_loss_batch
+# model / GPTModel, generate
 
 from ..data.processor import custom_collate_fn, format_input_phi, format_input_alpaca
 from ..data.dataset import AmazonDatasetPhi, AmazonDatasetAlpaca
@@ -37,16 +64,36 @@ def main():
 
     # Potential error: These files might not exist
     try:
-        end_of_text_id = json.load(open(processed_dir / "end_of_text_id.json"))
-        special_user_item_ids = json.load(open(processed_dir / "special_user_item_ids.json"))
+        #end_of_text_id = json.load(open(processed_dir / "end_of_text_id.json"))
+        special_user_item_ids =  set(["<|endoftext|>"] + json.load(open(processed_dir / "special_user_item_ids.json")))
     except FileNotFoundError as e:
         logger.error(f"Required JSON file not found: {e}")
+        raise
+
+    # 1.1 Set the tokenizers
+    #_______________________________________________________________________________
+    try:
+        base_tokenizer = tiktoken.get_encoding("gpt2")
+        custom_token_ids = {token: base_tokenizer.n_vocab + i for i, token in enumerate(special_user_item_ids)}
+        tokenizer = tiktoken.Encoding(
+        name="gpt2_custom",
+        pat_str=base_tokenizer._pat_str,
+        mergeable_ranks=base_tokenizer._mergeable_ranks,
+        special_tokens={**base_tokenizer._special_tokens, **custom_token_ids},
+        )
+
+        # Add special tokens to the tokenizer
+        end_of_text_id = np.array(tokenizer.encode("<|endoftext|>", allowed_special=special_user_item_ids)).item()
+
+
+    except Exception as e:
+        logger.error(f"Failed to load tokenizer: {e}")
         raise
 
     # =================================================================================
     # 1.0 Set custom collate function
     # =================================================================================
-    device = get_device()
+    device = str(get_device())
     
     # Potential error: These files might not exist
     try:
@@ -65,33 +112,27 @@ def main():
     
     logger.info("Finished setting custom collate function")
     phi3_prompt = config['custom_config']['phi3']
-    alpaca_prompt = config['custom_config']['alpaca']
 
     if phi3_prompt:
         CustomDataset = AmazonDatasetPhi
     else:
         CustomDataset = AmazonDatasetAlpaca
 
-    # 1.1 Set the data loaders
-    #_______________________________________________________________________________
-    try:
-        tokenizer = tiktoken.get_encoding("gpt2")
-    except Exception as e:
-        logger.error(f"Failed to load tokenizer: {e}")
-        raise
 
     train_dataset = CustomDataset(train_data, tokenizer, special_user_item_ids)
     val_dataset = CustomDataset(val_data, tokenizer, special_user_item_ids)
 
+    # Set the data loaders
+
     train_loader = DataLoader(
-        train_dataset, batch_size=config['model_config']['batch_size'], 
+        train_dataset, batch_size=config['data_config']['batch_size'], 
         collate_fn=customized_collate_fn, drop_last=True,
-        shuffle=False, num_workers=config['model_config']['num_workers'])
+        shuffle=False, num_workers=config['data_config']['num_workers'])
     
     val_loader = DataLoader(
-        val_dataset, batch_size=config['model_config']['batch_size'], 
+        val_dataset, batch_size=config['data_config']['batch_size'], 
         collate_fn=customized_collate_fn, drop_last=True,
-        shuffle=False, num_workers=config['model_config']['num_workers'])
+        shuffle=False, num_workers=config['data_config']['num_workers'])
     
     logger.info("Finished setting the data loaders")
 
@@ -113,42 +154,65 @@ def main():
 
     BASE_CONFIG.update(model_configs[CHOOSE_MODEL])
 
-    if CHOOSE_MODEL == "gpt2-small (124M)":
-        filename = "gpt2-small-124M.pth"
-    elif CHOOSE_MODEL == "gpt2-medium (355M)":
-        filename = "gpt2-medium-355M.pth"
-    elif CHOOSE_MODEL == "gpt2-large (774M)":
-        filename = "gpt2-large-774M.pth"
-    elif CHOOSE_MODEL == "gpt2-xl (1558M)":
-        filename = "gpt2-xl-1558M.pth"
-    else:
-        raise ValueError(f"Invalid model name: {CHOOSE_MODEL}")
+    #________________________
+    # allowed model names
+    model_names = {
+        "gpt2-small (124M)": "openai-community/gpt2",
+        "gpt2-medium (355M)": "openai-community/gpt2-medium",
+        "gpt2-large (774M)": "openai-community/gpt2-large",
+        "gpt2-xl (1558M)": "openai-community/gpt2-xl"
+    }
 
-    # Fix typo in variable name
-    url = f"https://huggingface.co/rasbt/gpt2-from-scratch-pytorch/resolve/main/{filename}"
+    model_hf = GPT2Model.from_pretrained(model_names[CHOOSE_MODEL], cache_dir="checkpoints")
+    model_hf.eval()
 
-    model_path = model_dir / filename
-    if not os.path.exists(model_path):
-        logger.info(f"Downloading model {filename} from {url}")
-        try:
-            urllib.request.urlretrieve(url, model_path)
-        except Exception as e:
-            logger.error(f"Failed to download model: {e}")
-            raise
-        logger.info(f"Downloaded to {model_path}")
-    else:
-        logger.info(f"Model {filename} already exists at {model_path}")
-
-    try:
-        model = model_fn.GPTModel(BASE_CONFIG)
-        model.load_state_dict(torch.load(model_path, weights_only=True))
-        model.eval()
-        model.to(device)
-    except Exception as e:
-        logger.error(f"Failed to load model: {e}")
-        raise
+    model = model_fn.GPTModel(BASE_CONFIG)
+    load_weights(model, model_hf, BASE_CONFIG)
+    model.to(device)
     
     logger.info(f"Finished loading the weights: {CHOOSE_MODEL}")
+
+    # Replace the old embedding layer with the new one in the model
+    #________________________________________________________________
+
+    #logging.info("Update the token embedding layer")
+    num_tokens, emb_size = model.tok_emb.weight.shape
+    new_num_tokens = num_tokens + len(special_user_item_ids)
+
+    # Create a new embedding layer and move it to the same device as the model
+    new_embedding = torch.nn.Embedding(new_num_tokens, emb_size).to(device)
+
+    # Copy weights from the old embedding layer
+    new_embedding.weight.data[:num_tokens] = model.tok_emb.weight.data
+
+    # Replace the old embedding layer with the new one in the model
+    model.tok_emb = new_embedding
+    #logger.info("Finished replacing the old embedding layer with the new one in the model")
+    logging.info("Updated the token embedding layer")
+
+    # Update the output layer
+    #________________________________________________________________
+    original_out_features, original_in_features = model.out_head.weight.shape
+
+    # Define the new number of output features
+    new_out_features = original_out_features + len(special_user_item_ids)
+
+    # Create a new linear layer with the extended output size and move it to the same device
+    new_linear = torch.nn.Linear(original_in_features, new_out_features).to(device)
+
+
+    # Copy the weights and biases from the original linear layer
+    with torch.no_grad():
+        new_linear.weight[:original_out_features] = model.out_head.weight
+        if model.out_head.bias is not None:
+            new_linear.bias[:original_out_features] = model.out_head.bias
+
+    # Replace the original linear layer with the new one
+    model.out_head = new_linear
+    logging.info("Updated the output layer")
+
+
+    # LORA
 
     lora = config['custom_config']['lora']
 
@@ -174,7 +238,7 @@ def main():
 
     # Initial Loss
     #_______________________________________________________________________________
-    logger.info("> Initial losses")
+    logger.info("Initial losses")
     with torch.no_grad():
         train_loss = model_fn.calc_loss_loader(train_loader, model, device, num_batches=4)
         val_loss = model_fn.calc_loss_loader(val_loader, model, device, num_batches=4)
@@ -187,20 +251,40 @@ def main():
     #_______________________________________________________________________________
     start_time = time.time()
 
-    num_epochs = config['training_config']['num_epochs']
+    num_epochs = int(config['training_config']['num_epochs'])
     optimizer = torch.optim.AdamW(model.parameters(), lr=config['training_config']['learning_rate'], weight_decay=config['training_config']['weight_decay'])
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=5, verbose=True)
 
     start_context = format_input_phi(val_data[0]) if phi3_prompt else format_input_alpaca(val_data[0])
 
-    train_losses, val_losses, tokens_seen = model_fn.train_model_simple(
-        model, train_loader, val_loader, optimizer, device,
-        num_epochs=num_epochs, eval_freq=5, eval_iter=5,
-        start_context=start_context, tokenizer=tokenizer,
-        special_chars=special_user_item_ids,
+    #train_losses, val_losses, tokens_seen = model_fn.train_model_simple(
+    #    model, train_loader, val_loader, optimizer, device,
+    #    num_epochs=num_epochs, eval_freq=5, eval_iter=5,
+    #    start_context=start_context, tokenizer=tokenizer,
+    #    special_chars=special_user_item_ids,
+    #)
+
+    # Use our optimized training function instead of train_model_simple
+    model, train_losses, val_losses, tokens_seen = train_model(
+        model=model,
+        train_loader=train_loader,
+        val_loader=val_loader,
+        optimizer=optimizer,
+        scheduler=scheduler,
+        device=device,
+        config=config,
+        logger=logger,
+        start_context=start_context,
+        tokenizer=tokenizer,
+        special_chars=special_user_item_ids
     )
+
     end_time = time.time()
     execution_time_minutes = (end_time - start_time) / 60
     logger.info(f"> Training completed in {execution_time_minutes:.2f} minutes.")
+
+    # Terminate execution here for testing
+    #sys.exit(0)
 
 
     logger.info("Plotting losses")
@@ -234,22 +318,54 @@ def main():
     for i, entry in tqdm(enumerate(test_data), total=len(test_data), desc="Generating responses"):
         try:
             input_text = format_input_phi(entry) if phi3_prompt else format_input_alpaca(entry)
-
+            
+            # Convert input text to token ids and move to device
+            input_ids = model_fn.text_to_token_ids(input_text, tokenizer, special_user_item_ids).to(device)
+            
+            # Generate response with adjusted parameters
             token_ids = model_fn.generate(
                 model=model,
-                idx=model_fn.text_to_token_ids(input_text, tokenizer, special_user_item_ids).to(device),
-                max_new_tokens=256,
+                idx=input_ids,
+                max_new_tokens=config['training_config']['max_new_tokens'],
                 context_size=BASE_CONFIG["context_length"],
                 eos_id=end_of_text_id,
+                temperature=config['training_config']['temperature'],
+                top_k=config['training_config']['top_k'], 
+                top_p=config['training_config']['top_p']
             )
+            
+            # Convert generated tokens back to text
             generated_text = model_fn.token_ids_to_text(token_ids, tokenizer)
-
+            
+            # Extract only the response part
             if phi3_prompt:
-                response_text = generated_text[len(input_text):].replace("<|assistant|>:", "").strip()
+                response_text = generated_text[len(input_text):].split("<|assistant|>:")[-1].strip()
             else:
-                response_text = generated_text[len(input_text):].replace("### Response:", "").strip()   
+                response_text = generated_text[len(input_text):].split("### Response:")[-1].strip()
+            
+            # Clean up the response
+            #response_text = re.findall(r'<\|ASIN_[^|]+\|>', response_text)
+            #response_text = ', '.join(response_text)
 
+            # Extract ASINs or endoftext token
+            asin_pattern = r'<\|ASIN_[^|]+\|>'
+            endoftext_pattern = r'<\|endoftext\|>'
+            matches = re.findall(f'({asin_pattern}|{endoftext_pattern})', response_text)
+            response_text = ', '.join(matches)
+            
+            #response_text = response_text.replace("<|endoftext|>", "").strip()
+            # Remove any trailing punctuation or special characters
+            #response_text = re.sub(r'[!]+$', '', response_text)
+            
+            # Store the response
             test_data[i]["model_response"] = response_text
+            
+            # Log occasional samples
+            if i % 100 == 0:
+                logger.info(f"\nSample generation {i}:")
+                logger.info(f"Input: {input_text[:100]}...")
+                logger.info(f"Response: {response_text}")
+                
         except Exception as e:
             logger.error(f"Failed to generate response for entry {i}: {e}")
             test_data[i]["model_response"] = ""
@@ -258,7 +374,7 @@ def main():
     # 4: Save the model 
     # =================================================================================
     try:
-        model_path = model_dir /  f"{re.sub(r'[ ()]', '', CHOOSE_MODEL) }-sft.pth"
+        model_path = model_dir /  f"finetuned-{re.sub(r'[ ()]', '', CHOOSE_MODEL) }-sft.pth"
         torch.save(model.state_dict(), model_path)
         logger.info(f"Saved model to {model_path}")
     except Exception as e:
@@ -274,6 +390,11 @@ def main():
         logger.info(f"Saved test data with responses to {test_data_path}")
     except Exception as e:
         logger.error(f"Failed to save test data responses: {e}")
+
+
+# functions: assign_check, load_weights, train_model
+
+
 
 
 if __name__ == "__main__":
