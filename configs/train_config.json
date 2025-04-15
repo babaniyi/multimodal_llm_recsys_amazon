@@ -12,7 +12,7 @@
         "dropout": 0.01,
         "image_embedding_dim": 2048,
         "test_mode": true,
-        "test_size": 200
+        "test_size": 1000
     },
     "data_config": {
         "train_file": "data/processed/train.json",
@@ -21,10 +21,10 @@
         "image_dir": "data/processed/images",
         "cache_dir": "data/processed/image_cache",
         "batch_size": 4,
-        "gradient_accumulation_steps": 8,
+        "gradient_accumulation_steps": 4,
         "num_workers": 0,
         "pin_memory": true,
-        "number_of_items_to_predict": 10,
+        "number_of_items_to_predict": 7,
         "min_interactions": 3,
         "user_prompt": "Given a user's purchase history and review for a product, predict the next 10 products they would likely purchase. "
     },
@@ -55,9 +55,9 @@
     },
     "checkpoint_dir": "checkpoints",
     "data_split_ratio": {
-        "train_ratio": 0.7,
+        "train_ratio": 0.75,
         "val_ratio": 0.15,
-        "test_ratio": 0.15
+        "test_ratio": 0.10
     },
     "gpt_model_config": {
         "gpt2-small (124M)": {"emb_dim": 768, "n_layers": 12, "n_heads": 12},

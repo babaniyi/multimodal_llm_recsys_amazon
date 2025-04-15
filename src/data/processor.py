@@ -90,7 +90,7 @@ def get_next_items(
     Returns:
         pd.DataFrame with ['user_id', 'parent_asin', 'timestamp', 'next_items', 'next_item_names']
     """
-    df_sorted = df.sort_values(by=['user_id', 'timestamp']).reset_index(drop=True)
+    df_sorted = df.sort_values(by=['timestamp']).reset_index(drop=True)
     next_items_data = []
 
     for user_id, user_data in df_sorted.groupby('user_id'):
@@ -201,7 +201,8 @@ def format_input_phi(entry):
 
 def split_data_temporal(df, train_ratio=0.7, val_ratio=0.15, test_ratio=0.15):
     """
-    Splits the data into train, validation, and test sets while preserving the temporal order of each user's interactions.
+    Splits the data into train, validation, and test sets based on timestamps.
+    This ensures no future data leaks into training.
 
     Args:
     - df (pd.DataFrame): DataFrame containing user interactions with 'user_id' and 'date' columns.
@@ -216,37 +217,37 @@ def split_data_temporal(df, train_ratio=0.7, val_ratio=0.15, test_ratio=0.15):
     """
     assert train_ratio + val_ratio + test_ratio == 1.0, "Ratios must sum up to 1."
 
-    # Sort data by user_id and date to maintain chronological order
-    df_sorted = df.sort_values(by=['user_id', 'date']).reset_index(drop=True)
+    # Convert date strings to datetime objects
+    df['date'] = pd.to_datetime(df['date'])
 
-    # Create empty DataFrames for train, validation, and test
-    train_df = pd.DataFrame()
-    val_df = pd.DataFrame()
-    test_df = pd.DataFrame()
+    # Sort all data by date
+    df_sorted = df.sort_values('date').reset_index(drop=True)
+    
+    # Find cutoff dates for splits
+    total_days = (df_sorted['date'].max() - df_sorted['date'].min()).days
+    train_end_date = df_sorted['date'].min() + pd.Timedelta(days=int(total_days * train_ratio))
+    val_end_date = train_end_date + pd.Timedelta(days=int(total_days * val_ratio))
 
-    # Split each user's data chronologically
-    for user_id, group in df_sorted.groupby('user_id'):
-        num_interactions = len(group)
+    # Split data based on dates
+    train_df = df_sorted[df_sorted['date'] < train_end_date].copy()
+    val_df = df_sorted[(df_sorted['date'] >= train_end_date) & 
+                       (df_sorted['date'] < val_end_date)].copy()
+    test_df = df_sorted[df_sorted['date'] >= val_end_date].copy()
 
-        # Calculate indices for train, validation, and test splits
-        train_end = int(train_ratio * num_interactions)
-        val_end = train_end + int(val_ratio * num_interactions)
+    # Convert dates back to strings in YYYY-MM-DD format
+    train_df['date'] = train_df['date'].dt.strftime('%Y-%m-%d')
+    val_df['date'] = val_df['date'].dt.strftime('%Y-%m-%d')  
+    test_df['date'] = test_df['date'].dt.strftime('%Y-%m-%d')
 
-        # Ensure there's at least one interaction in each split if possible
-        if train_end == 0:
-            train_end = 1
-        if val_end == train_end:
-            val_end = train_end + 1
-
-        # Concatenate each user's splits to the respective DataFrame
-        train_df = pd.concat([train_df, group.iloc[:train_end]])
-        val_df = pd.concat([val_df, group.iloc[train_end:val_end]])
-        test_df = pd.concat([test_df, group.iloc[val_end:]])
-
-    # Reset index after concatenation
+    # Reset indices
     train_df = train_df.reset_index(drop=True)
     val_df = val_df.reset_index(drop=True)
     test_df = test_df.reset_index(drop=True)
+
+    # Log split statistics
+    logger.info(f"Train period: {df_sorted['date'].min().strftime('%Y-%m-%d')} to {train_end_date.strftime('%Y-%m-%d')}")
+    logger.info(f"Val period: {train_end_date.strftime('%Y-%m-%d')} to {val_end_date.strftime('%Y-%m-%d')}")
+    logger.info(f"Test period: {val_end_date.strftime('%Y-%m-%d')} to {df_sorted['date'].max().strftime('%Y-%m-%d')}")
 
     return train_df, val_df, test_df
 
