@@ -12,7 +12,7 @@
         "dropout": 0.01,
         "image_embedding_dim": 2048,
         "test_mode": true,
-        "test_size": 1000
+        "test_size": 40000
     },
     "data_config": {
         "train_file": "data/processed/train.json",
@@ -20,12 +20,12 @@
         "test_file": "data/processed/test.json",
         "image_dir": "data/processed/images",
         "cache_dir": "data/processed/image_cache",
-        "batch_size": 4,
-        "gradient_accumulation_steps": 4,
+        "batch_size": 16,
+        "gradient_accumulation_steps": 2,
         "num_workers": 0,
         "pin_memory": true,
-        "number_of_items_to_predict": 7,
-        "min_interactions": 3,
+        "number_of_items_to_predict": 10,
+        "min_interactions": 7,
         "user_prompt": "Given a user's purchase history and review for a product, predict the next 10 products they would likely purchase. "
     },
     "training_config": {
@@ -34,11 +34,11 @@
         "min_learning_rate": 1e-6,
         "weight_decay": 0.1,
         "max_grad_norm": 1.0,
-        "save_every": 1,
+        "save_every": 50,
         "pad_token_id": 50256,
         "early_stopping_patience": 5,
         "early_stopping_min_delta": 0.001,
-        "warmup_steps": 1000,
+        "warmup_steps": 200,
         "fp16": true,
         "seed": 42,
         "log_dir": "logs",
@@ -46,8 +46,8 @@
         "lora": true,
         "lora_rank": 8,
         "lora_alpha": 0.5,
-        "eval_freq": 5,
-        "eval_iter": 5,
+        "eval_freq": 25,
+        "eval_iter": 1,
         "temperature": 0.5,
         "top_k": 20,
         "top_p": 0.8,
@@ -68,6 +68,7 @@
     "custom_config": {
         "phi3": true, 
         "alpaca": false,
-        "lora": false
+        "lora": false,
+        "vision_model": "resnet-18"
     }
 } 

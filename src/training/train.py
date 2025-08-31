@@ -38,7 +38,7 @@ def clear_cuda_cache():
 # - model/ calc_loss_batch
 # model / GPTModel, generate
 
-from ..data.processor import custom_collate_fn, format_input_phi, format_input_alpaca
+from ..data.processor import custom_collate_fn, format_input_phi, format_input_alpaca, ImageEncoder
 from ..data.dataset import AmazonDatasetPhi, AmazonDatasetAlpaca
 from ..utils.utils import get_device, load_config, setup_logging, set_seed
 from ..models import model as model_fn
@@ -59,6 +59,10 @@ def main():
 
     model_dir = Path("output") / "model"
     model_dir.mkdir(parents=True, exist_ok=True)
+
+    # Create checkpoints directory for vision model caching
+    checkpoints_dir = Path("checkpoints")
+    checkpoints_dir.mkdir(parents=True, exist_ok=True)
 
     config = load_config()
 
@@ -118,26 +122,51 @@ def main():
     else:
         CustomDataset = AmazonDatasetAlpaca
 
+    # Get vision model configuration
+    vision_model_name = config['custom_config'].get('vision_model', 'resnet-18')
+    logger.info(f"Using vision model: {vision_model_name}")
 
-    train_dataset = CustomDataset(train_data, tokenizer, special_user_item_ids)
-    val_dataset = CustomDataset(val_data, tokenizer, special_user_item_ids)
+    # Create a single multimodal encoder to share between datasets
+    multimodal_encoder = None
+    if phi3_prompt:
+        logger.info(f"Initializing shared ImageEncoder with vision model: {vision_model_name}")
+        try:
+            multimodal_encoder = ImageEncoder(vision_model_name=vision_model_name)
+            logger.info("Shared ImageEncoder initialized successfully")
+        except Exception as e:
+            logger.error(f"Failed to initialize ImageEncoder: {e}")
+            logger.warning("Continuing without image processing")
+            multimodal_encoder = None
+
+    logger.info("Creating training dataset...")
+    train_dataset = CustomDataset(train_data, tokenizer, special_user_item_ids, multimodal_encoder=multimodal_encoder)
+    logger.info(f"Training dataset created with {len(train_dataset)} samples")
+    
+    logger.info("Creating validation dataset...")
+    val_dataset = CustomDataset(val_data, tokenizer, special_user_item_ids, multimodal_encoder=multimodal_encoder)
+    logger.info(f"Validation dataset created with {len(val_dataset)} samples")
+
 
     # Set the data loaders
-
+    logger.info("Creating training data loader...")
     train_loader = DataLoader(
         train_dataset, batch_size=config['data_config']['batch_size'], 
         collate_fn=customized_collate_fn, drop_last=True,
         shuffle=False, num_workers=config['data_config']['num_workers'])
+    logger.info("Training data loader created")
     
+    logger.info("Creating validation data loader...")
     val_loader = DataLoader(
         val_dataset, batch_size=config['data_config']['batch_size'], 
         collate_fn=customized_collate_fn, drop_last=True,
         shuffle=False, num_workers=config['data_config']['num_workers'])
+    logger.info("Validation data loader created")
     
     logger.info("Finished setting the data loaders")
 
     # 1.2 Load pretrained model
     #_______________________________________________________________________________
+    logger.info("Setting up model configuration...")
     BASE_CONFIG = {
         "vocab_size": config['model_config']['vocab_size'],     # Vocabulary size
         "context_length": config['model_config']['context_length'],  # Context length
@@ -163,11 +192,16 @@ def main():
         "gpt2-xl (1558M)": "openai-community/gpt2-xl"
     }
 
+    logger.info(f"Loading HuggingFace model: {model_names[CHOOSE_MODEL]}")
     model_hf = GPT2Model.from_pretrained(model_names[CHOOSE_MODEL], cache_dir="checkpoints")
     model_hf.eval()
+    logger.info("HuggingFace model loaded successfully")
 
+    logger.info("Creating custom GPT model...")
     model = model_fn.GPTModel(BASE_CONFIG)
     load_weights(model, model_hf, BASE_CONFIG)
+    logger.info("Weights loaded successfully")
+    logger.info(f"Moving model to device: {device}")
     model.to(device)
     
     logger.info(f"Finished loading the weights: {CHOOSE_MODEL}")
@@ -264,6 +298,9 @@ def main():
     #    special_chars=special_user_item_ids,
     #)
 
+    # Set up checkpoint path
+    checkpoint_path = model_dir / "training_checkpoint.pth"
+
     # Use our optimized training function instead of train_model_simple
     model, train_losses, val_losses, tokens_seen = train_model(
         model=model,
@@ -276,7 +313,8 @@ def main():
         logger=logger,
         start_context=start_context,
         tokenizer=tokenizer,
-        special_chars=special_user_item_ids
+        special_chars=special_user_item_ids,
+        checkpoint_path=str(checkpoint_path)
     )
 
     end_time = time.time()

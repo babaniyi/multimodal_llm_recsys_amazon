@@ -4,6 +4,7 @@ from typing import List, Dict, Tuple
 import logging
 from sklearn.metrics import precision_score, recall_score, ndcg_score
 from collections import defaultdict
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -116,60 +117,18 @@ def calculate_metrics(predictions: List[List[int]], targets: List[List[int]], k:
     
     return metrics
 
-def evaluate_model(
-    model: torch.nn.Module,
-    test_loader: torch.utils.data.DataLoader,
-    device: torch.device,
-    k: int = 10
-) -> Dict[str, float]:
-    """
-    Evaluate the model on the test set.
-    
-    Args:
-        model: The model to evaluate
-        test_loader: Test data loader
-        device: Device to run evaluation on
-        k: Number of items to consider for top-k metrics
-        
-    Returns:
-        Dictionary of metric names and their values
-    """
-    model.eval()
-    all_predictions = []
-    all_targets = []
-    
-    with torch.no_grad():
-        for batch in test_loader:
-            # Move batch to device
-            input_ids = batch["input_ids"].to(device)
-            attention_mask = batch["attention_mask"].to(device)
-            labels = batch["labels"].to(device)
-            image_embeddings = batch.get("image_embeddings", None)
-            if image_embeddings is not None:
-                image_embeddings = image_embeddings.to(device)
-            
-            # Forward pass
-            outputs = model(
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                image_embeddings=image_embeddings
-            )
-            
-            # Get predictions
-            pred_ids = torch.argmax(outputs, dim=-1)
-            
-            # Convert predictions and targets to text
-            for i in range(len(pred_ids)):
-                pred_text = model.tokenizer.decode(pred_ids[i])
-                target_text = model.tokenizer.decode(labels[i])
-                all_predictions.append(pred_text)
-                all_targets.append(target_text)
-    
-    # Calculate metrics
-    metrics = calculate_metrics(all_predictions, all_targets, k)
-    
-    # Log metrics
-    for metric_name, value in metrics.items():
-        logger.info(f"{metric_name}: {value:.4f}")
-    
-    return metrics 
+# Load the JSON data
+with open('data/processed/test_with_responses_processed.json', 'r') as file:
+    data = json.load(file)
+
+# Extract predictions and targets
+predictions = [entry['model_response'].split(', ') for entry in data]
+targets = [entry['output'].split(', ') for entry in data]
+
+# Calculate metrics
+metrics = calculate_metrics(predictions, targets, k=7)
+
+# Log and print metrics
+for metric_name, value in metrics.items():
+    logger.info(f"{metric_name}: {value:.4f}")
+    print(f"{metric_name}: {value:.4f}") 

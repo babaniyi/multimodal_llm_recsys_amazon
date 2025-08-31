@@ -458,121 +458,172 @@ def load_weights(gpt, gpt_hf, BASE_CONFIG):
         gpt.trf_blocks[b].norm2.scale = assign_check(gpt.trf_blocks[b].norm2.scale, d[f"h.{b}.ln_2.weight"])
         gpt.trf_blocks[b].norm2.shift = assign_check(gpt.trf_blocks[b].norm2.shift, d[f"h.{b}.ln_2.bias"])
     
-        gpt.final_norm.scale = assign_check(gpt.final_norm.scale, d["ln_f.weight"])
-        gpt.final_norm.shift = assign_check(gpt.final_norm.shift, d["ln_f.bias"])
-        gpt.out_head.weight = assign_check(gpt.out_head.weight, d["wte.weight"])
-
-
-def train_model(model, train_loader, val_loader, optimizer, scheduler, device, config, logger, start_context=None, tokenizer=None, special_chars=None):
-    """Train the model with memory optimizations and tracking"""
-    # Initialize mixed precision training
-    scaler = amp.GradScaler()
-    train_losses, val_losses, track_tokens_seen = [], [], []
-    tokens_seen, global_step = 0, -1
-
-    # Enable gradient checkpointing at model level
-    model.gradient_checkpointing_enable()
+        # 28-07-2025: Currently inside the loop but maybe should be outside
     
-    # Set environment variable for better memory management
-    os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'expandable_segments:True'
+    gpt.final_norm.scale = assign_check(gpt.final_norm.scale, d["ln_f.weight"])
+    gpt.final_norm.shift = assign_check(gpt.final_norm.shift, d["ln_f.bias"])
+    gpt.out_head.weight = assign_check(gpt.out_head.weight, d["wte.weight"])
 
-    torch.backends.cuda.matmul.allow_tf32 = True  # Enable TF32 for faster computation
-    torch.backends.cudnn.benchmark = True  # Enable cuDNN benchmarking
 
-    
-    for epoch in range(config['training_config']['num_epochs']):
-        model.train()
+def train_model(model, train_loader, val_loader, optimizer, scheduler, device, config, logger, start_context=None, tokenizer=None, special_chars=None, checkpoint_path=None):
+        """Train the model with memory optimizations and tracking"""
+        # Initialize mixed precision training
+        scaler = amp.GradScaler()
+        train_losses, val_losses, track_tokens_seen = [], [], []
+        tokens_seen, global_step = 0, -1
+        start_epoch = 0
+
+        # Checkpoint loading
+        if checkpoint_path and os.path.exists(checkpoint_path):
+            logger.info(f"Loading checkpoint from {checkpoint_path}")
+            checkpoint = torch.load(checkpoint_path, map_location=device)
+            
+            # Load model state
+            model.load_state_dict(checkpoint['model_state_dict'])
+            
+            # Load optimizer state
+            optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+            
+            # Load scheduler state
+            if scheduler and 'scheduler_state_dict' in checkpoint:
+                scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
+            
+            # Load scaler state
+            if 'scaler_state_dict' in checkpoint:
+                scaler.load_state_dict(checkpoint['scaler_state_dict'])
+            
+            # Load training state
+            train_losses = checkpoint.get('train_losses', [])
+            val_losses = checkpoint.get('val_losses', [])
+            track_tokens_seen = checkpoint.get('track_tokens_seen', [])
+            tokens_seen = checkpoint.get('tokens_seen', 0)
+            global_step = checkpoint.get('global_step', -1)
+            start_epoch = checkpoint.get('epoch', 0)
+            
+            logger.info(f"Resumed from epoch {start_epoch}, step {global_step}")
+            logger.info(f"Previous losses - Train: {train_losses[-1] if train_losses else 'N/A'}, Val: {val_losses[-1] if val_losses else 'N/A'}")
+
+        # Enable gradient checkpointing at model level
+        model.gradient_checkpointing_enable()
         
-        for input_batch, target_batch in train_loader:
-            # Clear CUDA cache periodically
-            #if global_step % 5 == 0:
-            #    torch.cuda.empty_cache()
-            #    gc.collect()
+        # Set environment variable for better memory management
+        os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'expandable_segments:True'
 
-            if torch.isnan(input_batch).any() or torch.isinf(input_batch).any():
-                logger.warning("NaN or Inf detected in input batch, skipping this batch.")
-                continue  # Skip this batch
+        torch.backends.cuda.matmul.allow_tf32 = True  # Enable TF32 for faster computation
+        torch.backends.cudnn.benchmark = True  # Enable cuDNN benchmarking
 
-            optimizer.zero_grad()
+        
+        for epoch in range(start_epoch, config['training_config']['num_epochs']):
+            model.train()
             
-            # Use autocast to reduce memory usage with mixed precision
-            if device == "cuda":
-                with autocast(device_type="cuda"):
-                    # Check for NaN or Inf in input batch
-                    if torch.isnan(input_batch).any() or torch.isinf(input_batch).any():
-                        logger.error("NaN or Inf detected in input batch")
-                        continue
-                    # Forward pass
-                    outputs = calc_loss_batch(input_batch, target_batch, model, device)
+            for input_batch, target_batch in train_loader:
+                # Clear CUDA cache periodically
+                #if global_step % 5 == 0:
+                #    torch.cuda.empty_cache()
+                #    gc.collect()
 
-                    # Add detailed logging for debugging
-                    #logger.debug(f"Batch input IDs: {input_batch}")
-                    #logger.debug(f"Batch attention mask: {target_batch}")
-                    #logger.debug(f"Batch labels: {target_batch}")
-                    #logger.debug(f"Batch image embeddings: {input_batch}")
+                if torch.isnan(input_batch).any() or torch.isinf(input_batch).any():
+                    logger.warning("NaN or Inf detected in input batch, skipping this batch.")
+                    continue  # Skip this batch
 
-                    # Check for NaN or Inf in model's output (logits)
-                    if torch.isnan(outputs).any() or torch.isinf(outputs).any():
-                        logger.error("NaN or Inf detected in model's output (logits), skipping this batch.")
-                        continue  # Skip this batch
-
-                    # Calculate loss
-                    loss = outputs
-            else:
-                with autocast(device_type="cpu"):
-                    if torch.isnan(input_batch).any() or torch.isinf(input_batch).any():
-                        logger.error("NaN or Inf detected in input batch")
-                        continue
-                    # Forward pass
-                    outputs = calc_loss_batch(input_batch, target_batch, model, device)
-
-                    # Check for NaN or Inf in model's output (logits)
-                    if torch.isnan(outputs).any() or torch.isinf(outputs).any():
-                        logger.error("NaN or Inf detected in model's output (logits), skipping this batch.")
-                        continue  # Skip this batch
-
-                    # Calculate loss
-                    loss = outputs
-
-            # Scale the loss and call backward() with the scaler
-            scaler.scale(loss).backward()
-
-            # Clip gradients to prevent exploding gradients
-            scaler.unscale_(optimizer)
-            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-            
-            # Update model weights using the scaler
-            scaler.step(optimizer)
-            scaler.update()
-            
-            tokens_seen += input_batch.numel()
-            global_step += 1
-            
-            if global_step % config['training_config']['eval_freq'] == 0:
-                train_loss, val_loss = evaluate_model(
-                    model, train_loader, val_loader, device, config['training_config']['eval_iter'])
-                train_losses.append(train_loss)
-                val_losses.append(val_loss)
-                track_tokens_seen.append(tokens_seen)
-                logger.info(f"Ep {epoch+1} (Step {global_step:06d}): "
-                          f"Train loss {train_loss:.3f}, Val loss {val_loss:.3f}")
+                optimizer.zero_grad()
                 
-                # Update learning rate using scheduler
-                if scheduler:
-                    scheduler.step(val_loss)
+                # Use autocast to reduce memory usage with mixed precision
+                if device == "cuda":
+                    with autocast(device_type="cuda"):
+                        # Check for NaN or Inf in input batch
+                        if torch.isnan(input_batch).any() or torch.isinf(input_batch).any():
+                            logger.error("NaN or Inf detected in input batch")
+                            continue
+                        # Forward pass
+                        outputs = calc_loss_batch(input_batch, target_batch, model, device)
+
+                        # Add detailed logging for debugging
+                        #logger.debug(f"Batch input IDs: {input_batch}")
+                        #logger.debug(f"Batch attention mask: {target_batch}")
+                        #logger.debug(f"Batch labels: {target_batch}")
+                        #logger.debug(f"Batch image embeddings: {input_batch}")
+
+                        # Check for NaN or Inf in model's output (logits)
+                        if torch.isnan(outputs).any() or torch.isinf(outputs).any():
+                            logger.error("NaN or Inf detected in model's output (logits), skipping this batch.")
+                            continue  # Skip this batch
+
+                        # Calculate loss
+                        loss = outputs
+                else:
+                    with autocast(device_type="cpu"):
+                        if torch.isnan(input_batch).any() or torch.isinf(input_batch).any():
+                            logger.error("NaN or Inf detected in input batch")
+                            continue
+                        # Forward pass
+                        outputs = calc_loss_batch(input_batch, target_batch, model, device)
+
+                        # Check for NaN or Inf in model's output (logits)
+                        if torch.isnan(outputs).any() or torch.isinf(outputs).any():
+                            logger.error("NaN or Inf detected in model's output (logits), skipping this batch.")
+                            continue  # Skip this batch
+
+                        # Calculate loss
+                        loss = outputs
+
+                # Scale the loss and call backward() with the scaler
+                scaler.scale(loss).backward()
+
+                # Clip gradients to prevent exploding gradients
+                scaler.unscale_(optimizer)
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+                
+                # Update model weights using the scaler
+                scaler.step(optimizer)
+                scaler.update()
+                
+                tokens_seen += input_batch.numel()
+                global_step += 1
+                
+                if global_step % config['training_config']['eval_freq'] == 0:
+                    train_loss, val_loss = evaluate_model(
+                        model, train_loader, val_loader, device, config['training_config']['eval_iter'])
+                    train_losses.append(train_loss)
+                    val_losses.append(val_loss)
+                    track_tokens_seen.append(tokens_seen)
+                    logger.info(f"Ep {epoch+1} (Step {global_step:06d}): "
+                            f"Train loss {train_loss:.3f}, Val loss {val_loss:.3f}")
+                    
+                    # Save checkpoint
+                    if checkpoint_path:
+                        checkpoint = {
+                            'epoch': epoch,
+                            'global_step': global_step,
+                            'model_state_dict': model.state_dict(),
+                            'optimizer_state_dict': optimizer.state_dict(),
+                            'scheduler_state_dict': scheduler.state_dict() if scheduler else None,
+                            'scaler_state_dict': scaler.state_dict(),
+                            'train_losses': train_losses,
+                            'val_losses': val_losses,
+                            'track_tokens_seen': track_tokens_seen,
+                            'tokens_seen': tokens_seen,
+                            'config': config
+                        }
+                        torch.save(checkpoint, checkpoint_path)
+                        logger.info(f"Checkpoint saved to {checkpoint_path}")
+                    
+                    # Update learning rate using scheduler
+                    if scheduler:
+                        scheduler.step(val_loss)
+            
+            # Generate sample after each epoch
+            if start_context and tokenizer:
+                generate_and_print_sample(
+                    model, tokenizer, device, start_context, special_chars
+                )
+            
+            # Clear GPU cache after each epoch
+            if device == "cuda":
+                torch.cuda.empty_cache()
+                gc.collect()
         
-        # Generate sample after each epoch
-        if start_context and tokenizer:
-            generate_and_print_sample(
-                model, tokenizer, device, start_context, special_chars
-            )
-        
-        # Clear GPU cache after each epoch
-        if device == "cuda":
-            torch.cuda.empty_cache()
-            gc.collect()
-    
-    return model, train_losses, val_losses, track_tokens_seen
+        return model, train_losses, val_losses, track_tokens_seen
 
 
 

@@ -440,18 +440,47 @@ def save_processed_data(data: pd.DataFrame, output_path: Union[str, Path]):
 # ==========================================
 
 class ImageEncoder:
-    def __init__(self, image_size: int = 224, vision_model_name: str = "google/mobilenet_v2_1.0_224"):
+    def __init__(self, image_size: int = 224, vision_model_name: str = "resnet-18"):
         """
         Initialize the multi-modal processor for handling both text and image data.
         Args:
             image_size (int): Size to resize images to
+            vision_model_name (str): Vision model name (resnet-18, resnet-50, mobilenet-v2, etc.)
         """
         self.image_size = image_size
         
-        # Initialize image processor and model
-        self.image_processor = AutoImageProcessor.from_pretrained(vision_model_name, use_fast=True)
-        #self.image_processor = AutoImageProcessor.from_pretrained("microsoft/resnet-50")
-        self.vision_model = AutoModel.from_pretrained(vision_model_name)
+        # Map model names to HuggingFace model identifiers
+        model_mapping = {
+            "resnet-18": "microsoft/resnet-18",
+            "resnet-50": "microsoft/resnet-50",
+            "mobilenet-v2": "google/mobilenet_v2_1.0_224",
+            "mobilenet-v3": "google/mobilenet_v3_small_100_224",
+            "efficientnet-b0": "google/efficientnet-b0"
+        }
+        
+        # Get the full model name
+        if vision_model_name in model_mapping:
+            full_model_name = model_mapping[vision_model_name]
+        else:
+            # Assume it's already a full HuggingFace model name
+            full_model_name = vision_model_name
+            
+        logger.info(f"Loading vision model: {full_model_name} (alias: {vision_model_name})")
+        try:
+            # Initialize image processor and model with caching
+            self.image_processor = AutoImageProcessor.from_pretrained(
+                full_model_name, 
+                use_fast=True,
+                cache_dir="checkpoints"
+            )
+            self.vision_model = AutoModel.from_pretrained(
+                full_model_name,
+                cache_dir="checkpoints"
+            )
+            logger.info("Vision model loaded successfully")
+        except Exception as e:
+            logger.error(f"Failed to load vision model: {e}")
+            raise
 
         # Image transformation pipeline
         self.transform = transforms.Compose([
@@ -460,6 +489,7 @@ class ImageEncoder:
             transforms.Normalize(mean=[0.485, 0.456, 0.406], 
                               std=[0.229, 0.224, 0.225])
         ])
+        
         
             
     def process_image(self, image_path: str) -> Optional[torch.Tensor]:
@@ -499,18 +529,20 @@ class ImageEncoder:
         Returns:
             torch.Tensor: Image embedding
         """
-        # with torch.no_grad():
-        #     outputs = self.vision_model(image_tensor.unsqueeze(0))
-        #     return outputs.last_hidden_state.mean(dim=1)
-
-        # WORKING: with good output
         with torch.no_grad():
             # Get the output from the vision model
             outputs = self.vision_model(image_tensor.unsqueeze(0))
             
-            # Apply average pooling to reduce the size of the embeddings
-            pooled_output = torch.mean(outputs.last_hidden_state, dim=[2, 3])
-            return pooled_output
+            # For ResNet models, use the pooled output directly
+            if hasattr(outputs, 'pooler_output') and outputs.pooler_output is not None:
+                return outputs.pooler_output
+            elif hasattr(outputs, 'last_hidden_state'):
+                # Apply average pooling to reduce the size of the embeddings
+                pooled_output = torch.mean(outputs.last_hidden_state, dim=1)
+                return pooled_output
+            else:
+                # Fallback: use the first output
+                return outputs[0].mean(dim=1)
 
 
 def custom_collate_fn(
