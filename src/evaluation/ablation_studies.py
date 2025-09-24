@@ -28,7 +28,7 @@ class AblationStudy:
         self.config = config
         self.results = {}
         
-    def text_only_model(self, train_data: List[Dict], test_data: List[Dict]) -> Dict[str, float]:
+    def text_only_model(self, train_data: List[Dict], test_data: List[Dict], global_tfidf=None) -> Dict[str, float]:
         """
         Text-only baseline using TF-IDF and cosine similarity.
         """
@@ -166,7 +166,7 @@ class AblationStudy:
         return metrics
     
     def multimodal_fusion_comparison(self, train_data: List[Dict], test_data: List[Dict],
-                                   image_embeddings: Dict[str, np.ndarray]) -> Dict[str, Dict[str, float]]:
+                                   image_embeddings: Dict[str, np.ndarray], global_tfidf=None) -> Dict[str, Dict[str, float]]:
         """
         Compare different multimodal fusion strategies.
         """
@@ -200,7 +200,7 @@ class AblationStudy:
             
             # Text features
             text = f"{entry.get('title', '')} {entry.get('review_text', '')}"
-            text_vector = self._text_to_vector(text)
+            text_vector = self._text_to_vector(text, global_tfidf)
             
             # Image features
             if item_id in image_embeddings:
@@ -248,7 +248,7 @@ class AblationStudy:
             
             # Text features
             text = f"{entry.get('title', '')} {entry.get('review_text', '')}"
-            text_vector = self._text_to_vector(text)
+            text_vector = self._text_to_vector(text, global_tfidf)
             
             # Image features
             if item_id in image_embeddings:
@@ -295,7 +295,7 @@ class AblationStudy:
             
             # Text features
             text = f"{entry.get('title', '')} {entry.get('review_text', '')}"
-            text_vector = self._text_to_vector(text)
+            text_vector = self._text_to_vector(text, global_tfidf)
             
             # Image features
             if item_id in image_embeddings:
@@ -342,19 +342,35 @@ class AblationStudy:
         # Return balanced weights for simplicity
         return (0.5, 0.5)
     
-    def _text_to_vector(self, text: str) -> np.ndarray:
+    def _text_to_vector(self, text: str, tfidf_vectorizer=None) -> np.ndarray:
         """Convert text to vector representation."""
-        # Simple TF-IDF representation
-        tfidf = TfidfVectorizer(max_features=1000, stop_words='english')
-        vector = tfidf.fit_transform([text]).toarray().flatten()
+        # Clean text - remove special tokens and ensure it's not empty
+        cleaned_text = text.replace('<|endoftext|>', '').replace('<|ASIN_', '').replace('|>', '').strip()
         
-        # Pad or truncate to fixed size
-        if len(vector) < 1000:
-            vector = np.pad(vector, (0, 1000 - len(vector)))
-        else:
-            vector = vector[:1000]
+        # If text is empty or too short, return zero vector
+        if len(cleaned_text) < 3:
+            return np.zeros(1000)
         
-        return vector
+        try:
+            if tfidf_vectorizer is None:
+                # Create a simple TF-IDF vectorizer for single text
+                tfidf_vectorizer = TfidfVectorizer(max_features=1000, stop_words='english', min_df=1)
+                vector = tfidf_vectorizer.fit_transform([cleaned_text]).toarray().flatten()
+            else:
+                # Use pre-fitted vectorizer
+                vector = tfidf_vectorizer.transform([cleaned_text]).toarray().flatten()
+            
+            # Pad or truncate to fixed size
+            if len(vector) < 1000:
+                vector = np.pad(vector, (0, 1000 - len(vector)))
+            else:
+                vector = vector[:1000]
+            
+            return vector
+        except ValueError:
+            # If TF-IDF fails, return zero vector
+            logger.warning(f"TF-IDF failed for text: '{cleaned_text[:50]}...', using zero vector")
+            return np.zeros(1000)
     
     def _evaluate_multimodal(self, user_features: Dict[str, List[np.ndarray]], 
                            item_features: Dict[str, np.ndarray], 
@@ -436,12 +452,42 @@ class AblationStudy:
         
         return metrics
     
+    def _create_global_tfidf_vectorizer(self, train_data: List[Dict]) -> TfidfVectorizer:
+        """Create a global TF-IDF vectorizer from all training texts."""
+        logger.info("Creating global TF-IDF vectorizer...")
+        
+        # Collect all texts
+        all_texts = []
+        for entry in train_data:
+            if 'input' in entry:
+                cleaned_text = entry['input'].replace('<|endoftext|>', '').replace('<|ASIN_', '').replace('|>', '').strip()
+                if len(cleaned_text) >= 3:
+                    all_texts.append(cleaned_text)
+        
+        # Create TF-IDF vectorizer
+        tfidf = TfidfVectorizer(max_features=1000, stop_words='english', min_df=1)
+        tfidf.fit(all_texts)
+        
+        logger.info(f"TF-IDF vectorizer created with {len(all_texts)} texts")
+        return tfidf
+
     def run_complete_ablation(self, train_data: List[Dict], test_data: List[Dict],
                             image_embeddings: Dict[str, np.ndarray]) -> Dict[str, Any]:
         """
         Run complete ablation study.
         """
         logger.info("Starting complete ablation study...")
+        
+        # Limit dataset size for faster execution (use first 1000 samples)
+        max_samples = 1000
+        if len(train_data) > max_samples:
+            logger.info(f"Limiting ablation study to {max_samples} samples for faster execution")
+            train_data = train_data[:max_samples]
+        if len(test_data) > max_samples:
+            test_data = test_data[:max_samples]
+        
+        # Create global TF-IDF vectorizer for efficiency
+        global_tfidf = self._create_global_tfidf_vectorizer(train_data)
         
         results = {
             'timestamp': datetime.now().isoformat(),
@@ -451,14 +497,14 @@ class AblationStudy:
             'summary': {}
         }
         
-        # Text-only study
-        results['text_only'] = self.text_only_model(train_data, test_data)
+        # Text-only study (with optimized TF-IDF)
+        results['text_only'] = self.text_only_model(train_data, test_data, global_tfidf)
         
         # Image-only study
         results['image_only'] = self.image_only_model(train_data, test_data, image_embeddings)
         
-        # Multimodal fusion comparison
-        results['multimodal_fusion'] = self.multimodal_fusion_comparison(train_data, test_data, image_embeddings)
+        # Multimodal fusion comparison (with optimized TF-IDF)
+        results['multimodal_fusion'] = self.multimodal_fusion_comparison(train_data, test_data, image_embeddings, global_tfidf)
         
         # Generate summary
         results['summary'] = self._generate_ablation_summary(results)
@@ -524,26 +570,37 @@ class AblationStudy:
         logger.info(f"Ablation study results saved to {output_path}")
 
 
+def main():
+    """Main function to run ablation studies."""
+    logger.info("Running ablation studies...")
+    
+    try:
+        from src.utils.utils import load_config
+        
+        config = load_config()
+        
+        # Load data
+        with open(config['data_config']['train_file'], 'r') as f:
+            train_data = json.load(f)
+        
+        with open(config['data_config']['test_file'], 'r') as f:
+            test_data = json.load(f)
+        
+        # Load image embeddings (if available)
+        image_embeddings = {}  # Load from your image processing pipeline
+        
+        # Run ablation study
+        ablation = AblationStudy(config)
+        results = ablation.run_complete_ablation(train_data, test_data, image_embeddings)
+        
+        logger.info("Ablation study completed!")
+        logger.info(f"Best modality: {results['summary']['best_modality']}")
+        logger.info(f"Best fusion method: {results['summary']['best_fusion_method']}")
+        
+    except Exception as e:
+        logger.error(f"Ablation studies failed: {e}")
+        raise
+
+
 if __name__ == "__main__":
-    # Example usage
-    from src.utils.utils import load_config
-    
-    config = load_config()
-    
-    # Load data
-    with open(config['data_config']['train_file'], 'r') as f:
-        train_data = json.load(f)
-    
-    with open(config['data_config']['test_file'], 'r') as f:
-        test_data = json.load(f)
-    
-    # Load image embeddings (if available)
-    image_embeddings = {}  # Load from your image processing pipeline
-    
-    # Run ablation study
-    ablation = AblationStudy(config)
-    results = ablation.run_complete_ablation(train_data, test_data, image_embeddings)
-    
-    print("Ablation study completed!")
-    print(f"Best modality: {results['summary']['best_modality']}")
-    print(f"Best fusion method: {results['summary']['best_fusion_method']}")
+    main()

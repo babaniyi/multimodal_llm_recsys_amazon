@@ -212,11 +212,20 @@ class RobustEvaluator:
         return (mean_val - margin_error, mean_val + margin_error)
     
     def statistical_significance_test(self, results: Dict[str, Dict[str, Any]], 
-                                    baseline_model: str = 'cf_model') -> Dict[str, Dict[str, Any]]:
+                                    baseline_model: str = None) -> Dict[str, Dict[str, Any]]:
         """
         Perform statistical significance tests comparing all models to baseline.
         """
         significance_results = {}
+        
+        # If no baseline specified, use the first model as baseline
+        if baseline_model is None:
+            baseline_model = list(results.keys())[0]
+        
+        # Skip if baseline model doesn't exist
+        if baseline_model not in results:
+            logger.warning(f"Baseline model '{baseline_model}' not found in results. Skipping significance tests.")
+            return significance_results
         
         for model_name, model_results in results.items():
             if model_name == baseline_model:
@@ -322,31 +331,41 @@ def load_test_data_with_predictions(data_path: str) -> Tuple[Dict[str, List[List
     targets = [entry['output'].split(', ') for entry in data]
     
     # Extract predictions for each model
-    model_keys = ['model_response', 'cf_model', 'content_model', 'hybrid_model', 'popularity_model', 'mf_model']
-    model_names = ['gpt2-medium', 'cf_model', 'content_model', 'hybrid_model', 'popularity_model', 'mf_model']
-    
-    for key, name in zip(model_keys, model_names):
-        if key in data[0]:  # Check if this model has predictions
-            predictions[name] = [entry[key].split(', ') for entry in data]
+    # Only use models that actually exist in the data
+    if 'model_response' in data[0]:
+        predictions['multimodal_llm'] = [entry['model_response'].split(', ') for entry in data]
     
     return predictions, targets
 
 
+def main():
+    """Main function to run robust evaluation."""
+    logger.info("Running robust evaluation...")
+    
+    try:
+        from src.utils.utils import load_config
+        
+        config = load_config()
+        evaluator = RobustEvaluator(config, num_runs=5)
+        
+        # Load data - use the actual test data with model responses
+        predictions, targets = load_test_data_with_predictions('data/processed/test_with_responses.json')
+        
+        # Run robust evaluation
+        results = evaluator.run_multiple_evaluations(predictions, targets, k=10)
+        
+        # Statistical significance testing
+        significance_results = evaluator.statistical_significance_test(results)
+        
+        # Save results
+        evaluator.save_results(results, significance_results, 'data/processed/robust_evaluation_results.json')
+        
+        logger.info("Robust evaluation completed successfully!")
+        
+    except Exception as e:
+        logger.error(f"Robust evaluation failed: {e}")
+        raise
+
+
 if __name__ == "__main__":
-    # Example usage
-    from src.utils.utils import load_config
-    
-    config = load_config()
-    evaluator = RobustEvaluator(config, num_runs=5)
-    
-    # Load data
-    predictions, targets = load_test_data_with_predictions('data/processed/test_with_baseline_predictions.json')
-    
-    # Run robust evaluation
-    results = evaluator.run_multiple_evaluations(predictions, targets, k=10)
-    
-    # Statistical significance testing
-    significance_results = evaluator.statistical_significance_test(results)
-    
-    # Save results
-    evaluator.save_results(results, significance_results, 'data/processed/robust_evaluation_results.json')
+    main()

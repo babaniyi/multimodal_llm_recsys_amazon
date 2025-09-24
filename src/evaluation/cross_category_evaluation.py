@@ -15,11 +15,11 @@ import seaborn as sns
 
 from .metrics import calculate_metrics
 from ..baselines.recommender import (
-    CollaborativeFilteringRecommender,
+    CollaborativeFiltering,
     ContentBasedRecommender, 
     HybridRecommender,
     PopularityRecommender,
-    MatrixFactorizationRecommender
+    MatrixFactorization
 )
 
 logger = logging.getLogger(__name__)
@@ -146,7 +146,7 @@ class CrossCategoryEvaluator:
         
         # Evaluate Collaborative Filtering
         try:
-            cf_recommender = CollaborativeFilteringRecommender()
+            cf_recommender = CollaborativeFiltering()
             cf_recommender.fit(train_interactions)
             cf_predictions = cf_recommender.predict(test_users.keys(), k=10)
             baseline_results['Collaborative_Filtering'] = calculate_metrics(test_users, cf_predictions)
@@ -176,7 +176,7 @@ class CrossCategoryEvaluator:
         
         # Evaluate Matrix Factorization
         try:
-            mf_recommender = MatrixFactorizationRecommender()
+            mf_recommender = MatrixFactorization()
             mf_recommender.fit(train_interactions)
             mf_predictions = mf_recommender.predict(test_users.keys(), k=10)
             baseline_results['Matrix_Factorization'] = calculate_metrics(test_users, mf_predictions)
@@ -366,8 +366,13 @@ class CrossCategoryEvaluator:
                 baselines.update(cat_data.keys())
             
             x = np.arange(len(categories))
-            width = 0.8 / len(baselines)
+            width = 0.8 / max(len(baselines), 1)  # Avoid division by zero
             
+            if len(baselines) == 0:
+                axes[i].text(0.5, 0.5, 'No baseline data available', 
+                           ha='center', va='center', transform=axes[i].transAxes)
+                continue
+                
             for j, baseline in enumerate(baselines):
                 values = [baseline_performance[cat].get(baseline, {}).get(metric, 0) for cat in categories]
                 axes[i].bar(x + j * width, values, width, label=baseline)
@@ -483,17 +488,28 @@ def run_cross_category_evaluation(config: Dict[str, Any], model_predictions: Dic
     return results
 
 
+def main():
+    """Main function to run cross-category evaluation."""
+    logger.info("Running cross-category evaluation...")
+    
+    try:
+        from src.utils.utils import load_config
+        
+        config = load_config()
+        
+        # Run cross-category evaluation
+        results = run_cross_category_evaluation(config)
+        
+        logger.info("Cross-category evaluation completed!")
+        logger.info(f"Categories evaluated: {list(results['category_performance'].keys())}")
+        logger.info(f"Results saved to: data/processed/cross_category_evaluation_results.json")
+        
+    except Exception as e:
+        logger.error(f"Cross-category evaluation failed: {e}")
+        raise
+
+
 if __name__ == "__main__":
-    # Example usage
-    from src.utils.utils import load_config
-    
-    config = load_config()
-    
-    # Run cross-category evaluation
-    results = run_cross_category_evaluation(config)
-    
-    print("Cross-category evaluation completed!")
-    print(f"Categories evaluated: {list(results['category_performance'].keys())}")
-    print(f"Results saved to: data/processed/cross_category_evaluation_results.json")
+    main()
 
 

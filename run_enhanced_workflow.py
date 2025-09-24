@@ -193,18 +193,50 @@ def main():
     else:
         logger.info("Step 4: Baseline Comparison (skipped)")
     
-    # Step 5: Cross-Category Analysis
-    if "cross" in steps_to_run:
-        logger.info("Step 5: Cross-Category Analysis")
+    # Step 5: Robust Evaluation
+    if "eval" in steps_to_run:
+        logger.info("Step 5: Robust Evaluation")
         logger.info("=" * 60)
-        logger.info("Running cross-category evaluation...")
-        # Placeholder for cross-category analysis
-        logger.info("Cross-category analysis completed")
+        success = run_command(
+            "python -m src.evaluation.robust_evaluation",
+            "Running robust evaluation with statistical testing"
+        )
+        if not success:
+            logger.error("Robust evaluation failed. Exiting.")
+            return
     else:
-        logger.info("Step 5: Cross-Category Analysis (skipped)")
+        logger.info("Step 5: Robust Evaluation (skipped)")
     
-    # Step 6: Generate Summary Report
-    logger.info("Step 5: Generating Summary Report")
+    # Step 6: Ablation Studies
+    if "eval" in steps_to_run:
+        logger.info("Step 6: Ablation Studies")
+        logger.info("=" * 60)
+        success = run_command(
+            "python -m src.evaluation.ablation_studies",
+            "Running ablation studies"
+        )
+        if not success:
+            logger.error("Ablation studies failed. Exiting.")
+            return
+    else:
+        logger.info("Step 6: Ablation Studies (skipped)")
+    
+    # Step 7: Cross-Category Analysis
+    if "cross" in steps_to_run:
+        logger.info("Step 7: Cross-Category Analysis")
+        logger.info("=" * 60)
+        success = run_command(
+            "python -m src.evaluation.cross_category_evaluation",
+            "Running cross-category evaluation"
+        )
+        if not success:
+            logger.error("Cross-category analysis failed. Exiting.")
+            return
+    else:
+        logger.info("Step 7: Cross-Category Analysis (skipped)")
+    
+    # Step 8: Generate Summary Report
+    logger.info("Step 8: Generating Summary Report")
     logger.info("=" * 60)
     
     # Check for results files

@@ -62,4 +62,18 @@ if RUN_ABLATION_STUDIES:
         logger.error(f"Ablation studies failed: {e}")
         logger.info("Continuing without ablation studies...")
 else:
-    logger.info("Ablation studies disabled. Set 'ablation_studies': true in config to enable.") 
+    logger.info("Ablation studies disabled. Set 'ablation_studies': true in config to enable.")
+
+
+def main():
+    """Main function to process model outputs."""
+    logger.info("Processing model outputs...")
+    
+    # The processing logic is already executed when the module is imported
+    # This function exists for compatibility with the workflow script
+    
+    logger.info("Model output processing completed!")
+
+
+if __name__ == "__main__":
+    main() 
