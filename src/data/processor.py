@@ -177,26 +177,17 @@ def format_input_alpaca(entry):
 
 
 def format_input_phi(entry):
-    """ 
-    Phi-3 prompt template
-    This prompt template is substantially shorter, which reduces the runtime and hardware requirements for 
-    finetuning the LLM and generating text since the input prompts are shorter. 
-    It formats the data entry as follows:
-
-    <user>
-    Identify the correct spelling of the following word: 'Occasion'
-
-    <assistant>
-    The correct spelling is 'Occasion'.
-    """ 
-
-    instruction_text = (
-        f"<|user|>\n{entry['instruction']}"
-    )
-
-    input_text = f"\n{entry['input']}" if entry["input"] else ""
-
-    return instruction_text + input_text
+    """
+    Format entry according to the Phi-3-style prompt template.
+    """
+    # Handle missing fields gracefully
+    instruction = entry.get('instruction', 'Given a user\'s purchase history and review for a product, predict the next 10 products they would likely purchase.')
+    input_text = entry.get('input', '')
+    
+    # Create Phi-3 format (no truncation - handled in training)
+    formatted_text = f"<|user|>\n{instruction}\n{input_text}<|end|>\n<|assistant|>\n"
+    
+    return formatted_text
 
 
 def split_data_temporal(df, train_ratio=0.7, val_ratio=0.15, test_ratio=0.15):
