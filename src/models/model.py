@@ -512,6 +512,11 @@ def train_model(model, train_loader, val_loader, optimizer, scheduler, device, c
         torch.backends.cuda.matmul.allow_tf32 = True  # Enable TF32 for faster computation
         torch.backends.cudnn.benchmark = True  # Enable cuDNN benchmarking
 
+        # Early stopping variables
+        best_val_loss = float('inf')
+        patience_counter = 0
+        early_stopping_patience = config['training_config'].get('early_stopping_patience', 3)
+        min_delta = config['training_config'].get('early_stopping_min_delta', 0.001)
         
         for epoch in range(start_epoch, config['training_config']['num_epochs']):
             model.train()
@@ -578,8 +583,18 @@ def train_model(model, train_loader, val_loader, optimizer, scheduler, device, c
                 scaler.step(optimizer)
                 scaler.update()
                 
+                # Clear CUDA cache periodically to prevent OOM
+                if global_step % 10 == 0:
+                    torch.cuda.empty_cache()
+                
                 tokens_seen += input_batch.numel()
                 global_step += 1
+                
+                # Check max training steps limit
+                max_steps = config['training_config'].get('max_training_steps', 1000)
+                if global_step >= max_steps:
+                    logger.info(f"Reached maximum training steps ({max_steps}), stopping training")
+                    return model, train_losses, val_losses, track_tokens_seen
                 
                 if global_step % config['training_config']['eval_freq'] == 0:
                     train_loss, val_loss = evaluate_model(
@@ -589,6 +604,20 @@ def train_model(model, train_loader, val_loader, optimizer, scheduler, device, c
                     track_tokens_seen.append(tokens_seen)
                     logger.info(f"Ep {epoch+1} (Step {global_step:06d}): "
                             f"Train loss {train_loss:.3f}, Val loss {val_loss:.3f}")
+                    
+                    # Early stopping check
+                    if val_loss < best_val_loss - min_delta:
+                        best_val_loss = val_loss
+                        patience_counter = 0
+                        logger.info(f"New best validation loss: {val_loss:.3f}")
+                    else:
+                        patience_counter += 1
+                        logger.info(f"No improvement for {patience_counter} evaluations")
+                        
+                        if patience_counter >= early_stopping_patience:
+                            logger.info(f"Early stopping triggered after {patience_counter} evaluations without improvement")
+                            logger.info(f"Best validation loss: {best_val_loss:.3f}")
+                            return model, train_losses, val_losses, track_tokens_seen
                     
                     # Save checkpoint
                     if checkpoint_path:

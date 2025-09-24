@@ -3,6 +3,7 @@ from typing import List, Dict
 from datetime import datetime
 from tqdm import tqdm
 import logging
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -128,9 +129,14 @@ class AmazonDatasetPhi(Dataset):
     _sequence_cache = {}
     
     # Adjust Dataset to Phi3 format with unified multimodal embedding
-    def __init__(self, data, tokenizer, special_chars, multimodal_encoder=None, vision_model_name="resnet-18"):
-        # Initialize multimodal encoder if not provided
-        if multimodal_encoder is None:
+    def __init__(self, data, tokenizer, special_chars, multimodal_encoder=None, vision_model_name="resnet-18", config=None):
+        # Check if image processing is enabled (default to True for multimodal)
+        enable_image_processing = config.get('data_config', {}).get('enable_image_processing', True)
+        if not enable_image_processing:
+            logger.info("Image processing disabled in config")
+        
+        # Initialize multimodal encoder if not provided and enabled
+        if multimodal_encoder is None and enable_image_processing:
             logger.info(f"Initializing ImageEncoder with vision model: {vision_model_name}")
             try:
                 multimodal_encoder = processor.ImageEncoder(vision_model_name=vision_model_name)
@@ -139,6 +145,9 @@ class AmazonDatasetPhi(Dataset):
                 logger.error(f"Failed to initialize ImageEncoder: {e}")
                 logger.warning("Continuing without image processing")
                 multimodal_encoder = None
+        elif not enable_image_processing:
+            multimodal_encoder = None
+            logger.info("Image processing disabled - using text-only mode")
         self.data = data
         self.tokenizer = tokenizer
         self.special_chars = set(special_chars)  # Convert to set
@@ -153,8 +162,11 @@ class AmazonDatasetPhi(Dataset):
         cached_count = 0
         new_count = 0
         
+        # Check if fast training mode is enabled
+        fast_training = config.get('data_config', {}).get('fast_training_mode', False)
+        
         for i, entry in enumerate(data):
-            if i % 1000 == 0:
+            if i % 5000 == 0:  # Reduced logging frequency
                 logger.info(f"Processing entry {i}/{len(data)}")
             
             # Create a unique key for this entry based on its content
@@ -168,7 +180,15 @@ class AmazonDatasetPhi(Dataset):
             else:
                 # Process text
                 instruction_plus_input = processor.format_input_phi(entry)
-                response_text = f"\n<|assistant|>:\n{entry['output']}"
+                
+                # Use output from entry (should be present after proper processing)
+                if 'output' in entry:
+                    response_text = f"\n<|assistant|>:\n{entry['output']}"
+                else:
+                    # Fallback for backward compatibility
+                    parent_asin = entry.get('parent_asin', '')
+                    title = entry.get('title', '')
+                    response_text = f"\n<|assistant|>:\nRecommended product: {title} (ID: {parent_asin})"
                 
                 # Get text tokens
                 text_tokens = self.tokenizer.encode(
@@ -177,14 +197,14 @@ class AmazonDatasetPhi(Dataset):
                 )
 
                 # Process image if available and multimodal encoder is provided
-                if entry.get('local_image_path') and self.multimodal_encoder is not None:
+                image_path = entry.get('local_image_path')
+                if image_path and self.multimodal_encoder is not None and not fast_training:
                     try:
                         # Check if image is already cached
-                        image_path = entry['local_image_path']
                         if image_path in self._image_cache:
                             image_token_list = self._image_cache[image_path]
-                            logger.debug(f"Using cached image embedding for {image_path}")
                         else:
+                            # Process local image file
                             image_tensor = self.multimodal_encoder.process_image(image_path)
                             if image_tensor is not None:
                                 # Get image tokens using vision encoder
@@ -204,6 +224,7 @@ class AmazonDatasetPhi(Dataset):
                         logger.warning(f"Failed to process image for entry {i}: {e}")
                         combined_tokens = text_tokens
                 else:
+                    # Skip image processing in fast training mode
                     combined_tokens = text_tokens
 
                 # Add response tokens at the end
