@@ -175,18 +175,18 @@ class AblationStudy:
         fusion_results = {}
         
         # 1. Simple concatenation (current approach)
-        fusion_results['concatenation'] = self._concatenation_fusion(train_data, test_data, image_embeddings)
+        fusion_results['concatenation'] = self._concatenation_fusion(train_data, test_data, image_embeddings, global_tfidf)
         
         # 2. Weighted fusion
-        fusion_results['weighted'] = self._weighted_fusion(train_data, test_data, image_embeddings)
+        fusion_results['weighted'] = self._weighted_fusion(train_data, test_data, image_embeddings, global_tfidf)
         
         # 3. Attention-based fusion
-        fusion_results['attention'] = self._attention_fusion(train_data, test_data, image_embeddings)
+        fusion_results['attention'] = self._attention_fusion(train_data, test_data, image_embeddings, global_tfidf)
         
         return fusion_results
     
     def _concatenation_fusion(self, train_data: List[Dict], test_data: List[Dict],
-                            image_embeddings: Dict[str, np.ndarray]) -> Dict[str, float]:
+                            image_embeddings: Dict[str, np.ndarray], global_tfidf=None) -> Dict[str, float]:
         """Simple concatenation fusion (current approach)."""
         logger.info("  Testing concatenation fusion...")
         
@@ -205,8 +205,15 @@ class AblationStudy:
             # Image features
             if item_id in image_embeddings:
                 image_vector = image_embeddings[item_id]
+                # Ensure image vector has same dimension as text vector for concatenation
+                if len(image_vector) != len(text_vector):
+                    # Pad or truncate image vector to match text vector size
+                    if len(image_vector) > len(text_vector):
+                        image_vector = image_vector[:len(text_vector)]
+                    else:
+                        image_vector = np.pad(image_vector, (0, len(text_vector) - len(image_vector)))
             else:
-                image_vector = np.zeros(2048)  # Default image embedding size
+                image_vector = np.zeros(len(text_vector))  # Match text vector size
             
             # Concatenate features
             combined_features = np.concatenate([text_vector, image_vector])
@@ -231,12 +238,12 @@ class AblationStudy:
         return metrics
     
     def _weighted_fusion(self, train_data: List[Dict], test_data: List[Dict],
-                        image_embeddings: Dict[str, np.ndarray]) -> Dict[str, float]:
+                        image_embeddings: Dict[str, np.ndarray], global_tfidf=None) -> Dict[str, float]:
         """Weighted fusion of text and image features."""
         logger.info("  Testing weighted fusion...")
         
         # Optimize weights using validation data
-        text_weight, image_weight = self._optimize_fusion_weights(train_data, image_embeddings)
+        text_weight, image_weight = self._optimize_fusion_weights(train_data, image_embeddings, global_tfidf)
         
         # Prepare multimodal data with optimized weights
         item_features = {}
@@ -253,8 +260,15 @@ class AblationStudy:
             # Image features
             if item_id in image_embeddings:
                 image_vector = image_embeddings[item_id]
+                # Ensure image vector has same dimension as text vector for weighted combination
+                if len(image_vector) != len(text_vector):
+                    # Pad or truncate image vector to match text vector size
+                    if len(image_vector) > len(text_vector):
+                        image_vector = image_vector[:len(text_vector)]
+                    else:
+                        image_vector = np.pad(image_vector, (0, len(text_vector) - len(image_vector)))
             else:
-                image_vector = np.zeros(2048)
+                image_vector = np.zeros(len(text_vector))  # Match text vector size
             
             # Weighted combination
             combined_features = text_weight * text_vector + image_weight * image_vector
@@ -281,7 +295,7 @@ class AblationStudy:
         return metrics
     
     def _attention_fusion(self, train_data: List[Dict], test_data: List[Dict],
-                         image_embeddings: Dict[str, np.ndarray]) -> Dict[str, float]:
+                         image_embeddings: Dict[str, np.ndarray], global_tfidf=None) -> Dict[str, float]:
         """Attention-based fusion of text and image features."""
         logger.info("  Testing attention fusion...")
         
@@ -300,8 +314,15 @@ class AblationStudy:
             # Image features
             if item_id in image_embeddings:
                 image_vector = image_embeddings[item_id]
+                # Ensure image vector has same dimension as text vector for attention fusion
+                if len(image_vector) != len(text_vector):
+                    # Pad or truncate image vector to match text vector size
+                    if len(image_vector) > len(text_vector):
+                        image_vector = image_vector[:len(text_vector)]
+                    else:
+                        image_vector = np.pad(image_vector, (0, len(text_vector) - len(image_vector)))
             else:
-                image_vector = np.zeros(2048)
+                image_vector = np.zeros(len(text_vector))  # Match text vector size
             
             # Attention-based fusion
             # Simple attention: compute attention weights based on feature magnitudes
@@ -337,7 +358,7 @@ class AblationStudy:
         return metrics
     
     def _optimize_fusion_weights(self, train_data: List[Dict], 
-                                image_embeddings: Dict[str, np.ndarray]) -> Tuple[float, float]:
+                                image_embeddings: Dict[str, np.ndarray], global_tfidf=None) -> Tuple[float, float]:
         """Simplified weight optimization."""
         # Return balanced weights for simplicity
         return (0.5, 0.5)
@@ -572,11 +593,12 @@ class AblationStudy:
 
 def main():
     """Main function to run ablation studies."""
+    from src.utils.utils import setup_logging, load_config
+    
+    setup_logging()
     logger.info("Running ablation studies...")
     
     try:
-        from src.utils.utils import load_config
-        
         config = load_config()
         
         # Load data

@@ -340,10 +340,12 @@ def load_test_data_with_predictions(data_path: str) -> Tuple[Dict[str, List[List
 
 def main():
     """Main function to run robust evaluation."""
+    from src.utils.utils import setup_logging, load_config
+    
+    setup_logging()
     logger.info("Running robust evaluation...")
     
     try:
-        from src.utils.utils import load_config
         
         config = load_config()
         evaluator = RobustEvaluator(config, num_runs=5)

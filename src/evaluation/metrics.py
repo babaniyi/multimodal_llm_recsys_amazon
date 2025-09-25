@@ -22,29 +22,30 @@ def calculate_metrics(predictions: List[List[int]], targets: List[List[int]], k:
     """
     metrics = {}
     
-    # Calculate Hit Rate@k
+    # Calculate Hit Rate@k (treating <|endoftext|> as valid predictions)
     hits = 0
     total = len(predictions)
     for pred, target in zip(predictions, targets):
+        # Check if any predicted item (including <|endoftext|>) matches target
         if any(item in target for item in pred[:k]):
             hits += 1
     metrics[f'hr@{k}'] = hits / total
     
-    # Calculate Precision@k
+    # Calculate Precision@k (treating <|endoftext|> as valid predictions)
     total_precision = 0
     for pred, target in zip(predictions, targets):
         hits = len(set(pred[:k]) & set(target))
         total_precision += hits / k
     metrics[f'precision@{k}'] = total_precision / total
     
-    # Calculate Recall@k
+    # Calculate Recall@k (treating <|endoftext|> as valid predictions)
     total_recall = 0
     for pred, target in zip(predictions, targets):
         hits = len(set(pred[:k]) & set(target))
         total_recall += hits / len(target)
     metrics[f'recall@{k}'] = total_recall / total
     
-    # Calculate NDCG@k
+    # Calculate NDCG@k (treating <|endoftext|> as valid predictions)
     total_ndcg = 0
     for pred, target in zip(predictions, targets):
         dcg = 0
@@ -55,7 +56,7 @@ def calculate_metrics(predictions: List[List[int]], targets: List[List[int]], k:
         total_ndcg += dcg / idcg
     metrics[f'ndcg@{k}'] = total_ndcg / total
     
-    # Calculate MRR (Mean Reciprocal Rank)
+    # Calculate MRR (Mean Reciprocal Rank) - treating <|endoftext|> as valid predictions
     total_mrr = 0
     for pred, target in zip(predictions, targets):
         for i, item in enumerate(pred):
@@ -64,7 +65,7 @@ def calculate_metrics(predictions: List[List[int]], targets: List[List[int]], k:
                 break
     metrics['mrr'] = total_mrr / total
     
-    # Calculate MAP (Mean Average Precision)
+    # Calculate MAP (Mean Average Precision) - treating <|endoftext|> as valid predictions
     total_map = 0
     for pred, target in zip(predictions, targets):
         ap = 0

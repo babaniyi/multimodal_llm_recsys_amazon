@@ -14,6 +14,52 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 from .metrics import calculate_metrics
+
+def calculate_baseline_metrics(test_users: Dict[str, List[str]], predictions: Dict[str, List[str]]) -> Dict[str, float]:
+    """
+    Calculate metrics for baseline models with dictionary format.
+    
+    Args:
+        test_users: Dict mapping user_id to list of ground truth items
+        predictions: Dict mapping user_id to list of predicted items
+        
+    Returns:
+        Dictionary of metric values
+    """
+    # Convert to list format for calculate_metrics
+    pred_lists = []
+    target_lists = []
+    
+    for user_id in test_users.keys():
+        if user_id in predictions:
+            pred_lists.append(predictions[user_id])
+            target_lists.append(test_users[user_id])
+        else:
+            # If user not in predictions, use empty list
+            pred_lists.append([])
+            target_lists.append(test_users[user_id])
+    
+    # Convert string ASINs to integers for metrics calculation
+    # Create mapping from ASIN to integer
+    all_items = set()
+    for items in target_lists:
+        all_items.update(items)
+    for items in pred_lists:
+        all_items.update(items)
+    
+    item_to_int = {item: idx for idx, item in enumerate(all_items)}
+    
+    # Convert to integer lists
+    pred_int_lists = []
+    target_int_lists = []
+    
+    for pred_list, target_list in zip(pred_lists, target_lists):
+        pred_int = [item_to_int[item] for item in pred_list if item in item_to_int]
+        target_int = [item_to_int[item] for item in target_list if item in item_to_int]
+        pred_int_lists.append(pred_int)
+        target_int_lists.append(target_int)
+    
+    return calculate_metrics(pred_int_lists, target_int_lists, k=10)
 from ..baselines.recommender import (
     CollaborativeFiltering,
     ContentBasedRecommender, 
@@ -31,7 +77,8 @@ class CrossCategoryEvaluator:
     
     def __init__(self, config: Dict[str, Any]):
         self.config = config
-        self.categories = ['Appliances', 'Digital_Music', 'Gift_Cards', 'Health_and_Personal_Care']
+        # Use categories with sufficient data (more than 100 samples)
+        self.categories = ['Appliances', 'Amazon Home', 'Health & Personal Care', 'Tools & Home Improvement']
         self.results = {}
         
     def load_category_data(self, category: str) -> Tuple[List[Dict], List[Dict], List[Dict]]:
@@ -60,8 +107,8 @@ class CrossCategoryEvaluator:
             with open(data_dir / "val.json", 'r') as f:
                 all_val = json.load(f)
             
-            train_data = [item for item in all_train if item.get('category') == category]
-            val_data = [item for item in all_val if item.get('category') == category]
+            train_data = [item for item in all_train if item.get('main_category') == category]
+            val_data = [item for item in all_val if item.get('main_category') == category]
             
         else:
             # Fallback: load main splits and filter by category
@@ -74,9 +121,9 @@ class CrossCategoryEvaluator:
             with open(data_dir / "test.json", 'r') as f:
                 all_test = json.load(f)
             
-            train_data = [item for item in all_train if item.get('category') == category]
-            val_data = [item for item in all_val if item.get('category') == category]
-            test_data = [item for item in all_test if item.get('category') == category]
+            train_data = [item for item in all_train if item.get('main_category') == category]
+            val_data = [item for item in all_val if item.get('main_category') == category]
+            test_data = [item for item in all_test if item.get('main_category') == category]
         
         logger.info(f"Loaded {len(train_data)} train, {len(val_data)} val, {len(test_data)} test samples for {category}")
         return train_data, val_data, test_data
@@ -110,7 +157,7 @@ class CrossCategoryEvaluator:
             test_users[user_id].append(item['parent_asin'])
         
         # Calculate metrics
-        metrics = calculate_metrics(test_users, model_predictions)
+        metrics = calculate_baseline_metrics(test_users, model_predictions)
         
         logger.info(f"Category {category} metrics: {metrics}")
         return metrics
@@ -129,14 +176,18 @@ class CrossCategoryEvaluator:
         
         train_data, val_data, test_data = self.load_category_data(category)
         
-        if not train_data or not test_data:
-            logger.warning(f"Insufficient data for category {category}")
+        # Check if we have sufficient data (at least 10 samples each)
+        min_samples = 10
+        if len(train_data) < min_samples or len(test_data) < min_samples:
+            logger.warning(f"Insufficient data for category {category}: {len(train_data)} train, {len(test_data)} test samples")
             return {}
+        
+        logger.info(f"Evaluating {category} with {len(train_data)} train and {len(test_data)} test samples")
         
         baseline_results = {}
         
-        # Prepare data for baselines
-        train_interactions = [(item['user_id'], item['parent_asin']) for item in train_data]
+        # Prepare data for baselines - convert to DataFrame format
+        train_df = pd.DataFrame(train_data)
         test_users = {}
         for item in test_data:
             user_id = item['user_id']
@@ -147,9 +198,12 @@ class CrossCategoryEvaluator:
         # Evaluate Collaborative Filtering
         try:
             cf_recommender = CollaborativeFiltering()
-            cf_recommender.fit(train_interactions)
-            cf_predictions = cf_recommender.predict(test_users.keys(), k=10)
-            baseline_results['Collaborative_Filtering'] = calculate_metrics(test_users, cf_predictions)
+            cf_recommender.fit(train_df)
+            cf_predictions = {}
+            for user_id in test_users.keys():
+                pred = cf_recommender.predict(user_id, n_items=10)
+                cf_predictions[user_id] = pred
+            baseline_results['Collaborative_Filtering'] = calculate_baseline_metrics(test_users, cf_predictions)
         except Exception as e:
             logger.error(f"CF evaluation failed for {category}: {e}")
             baseline_results['Collaborative_Filtering'] = {}
@@ -157,9 +211,11 @@ class CrossCategoryEvaluator:
         # Evaluate Content-Based
         try:
             cb_recommender = ContentBasedRecommender()
-            cb_recommender.fit(train_data)
-            cb_predictions = cb_recommender.predict(test_users.keys(), k=10)
-            baseline_results['Content_Based'] = calculate_metrics(test_users, cb_predictions)
+            cb_recommender.fit(train_df)
+            cb_predictions = {}
+            for user_id in test_users.keys():
+                cb_predictions[user_id] = cb_recommender.predict(user_id, n_items=10)
+            baseline_results['Content_Based'] = calculate_baseline_metrics(test_users, cb_predictions)
         except Exception as e:
             logger.error(f"CB evaluation failed for {category}: {e}")
             baseline_results['Content_Based'] = {}
@@ -167,9 +223,13 @@ class CrossCategoryEvaluator:
         # Evaluate Popularity
         try:
             pop_recommender = PopularityRecommender()
-            pop_recommender.fit(train_interactions)
-            pop_predictions = pop_recommender.predict(test_users.keys(), k=10)
-            baseline_results['Popularity'] = calculate_metrics(test_users, pop_predictions)
+            pop_recommender.fit(train_df)
+            # Popularity recommender returns same recommendations for all users
+            popular_items = pop_recommender.predict(n_items=10)
+            pop_predictions = {}
+            for user_id in test_users.keys():
+                pop_predictions[user_id] = popular_items
+            baseline_results['Popularity'] = calculate_baseline_metrics(test_users, pop_predictions)
         except Exception as e:
             logger.error(f"Popularity evaluation failed for {category}: {e}")
             baseline_results['Popularity'] = {}
@@ -177,9 +237,11 @@ class CrossCategoryEvaluator:
         # Evaluate Matrix Factorization
         try:
             mf_recommender = MatrixFactorization()
-            mf_recommender.fit(train_interactions)
-            mf_predictions = mf_recommender.predict(test_users.keys(), k=10)
-            baseline_results['Matrix_Factorization'] = calculate_metrics(test_users, mf_predictions)
+            mf_recommender.fit(train_df)
+            mf_predictions = {}
+            for user_id in test_users.keys():
+                mf_predictions[user_id] = mf_recommender.predict(user_id, n_items=10)
+            baseline_results['Matrix_Factorization'] = calculate_baseline_metrics(test_users, mf_predictions)
         except Exception as e:
             logger.error(f"MF evaluation failed for {category}: {e}")
             baseline_results['Matrix_Factorization'] = {}
@@ -490,11 +552,12 @@ def run_cross_category_evaluation(config: Dict[str, Any], model_predictions: Dic
 
 def main():
     """Main function to run cross-category evaluation."""
+    from src.utils.utils import setup_logging, load_config
+    
+    setup_logging()
     logger.info("Running cross-category evaluation...")
     
     try:
-        from src.utils.utils import load_config
-        
         config = load_config()
         
         # Run cross-category evaluation

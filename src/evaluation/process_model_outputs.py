@@ -67,6 +67,9 @@ else:
 
 def main():
     """Main function to process model outputs."""
+    from src.utils.utils import setup_logging
+    
+    setup_logging()
     logger.info("Processing model outputs...")
     
     # The processing logic is already executed when the module is imported
