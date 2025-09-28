@@ -132,9 +132,15 @@ def main():
         # Take a random sample of reviews
         review_data = review_data[:TEST_SIZE]
 
-    # Filter users with at least 2 interactions
+    # Filter users with at least min_interactions interactions
     logger.info(f"Filtering users with at least {config['data_config']['min_interactions']} interactions...")
     filtered_review_data = processor.filter_users_by_interactions(review_data, min_interactions=config['data_config']['min_interactions'])
+    
+    # Additional filtering for longer sequences if enabled
+    if config['data_config'].get('sequence_aware_training', False):
+        min_items_per_sequence = config['data_config'].get('min_items_per_sequence', 8)
+        logger.info(f"Additional filtering for users with {min_items_per_sequence}+ items per sequence...")
+        filtered_review_data = processor.filter_users_by_sequence_length(filtered_review_data, min_items_per_sequence=min_items_per_sequence)
 
     # Get unique parent_asins from filtered reviews
     valid_parent_asins = set(review.get('parent_asin') for review in filtered_review_data)

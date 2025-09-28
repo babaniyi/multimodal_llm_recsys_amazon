@@ -320,7 +320,7 @@ def main():
 
     num_epochs = int(config['training_config']['num_epochs'])
     optimizer = torch.optim.AdamW(model.parameters(), lr=config['training_config']['learning_rate'], weight_decay=config['training_config']['weight_decay'])
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=5, verbose=True)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=5)
 
     start_context = format_input_phi(val_data[0]) if phi3_prompt else format_input_alpaca(val_data[0])
 

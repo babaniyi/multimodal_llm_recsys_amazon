@@ -69,6 +69,72 @@ def filter_users_by_interactions(review_data: List[Dict], min_interactions: int 
     
     return filtered_data
 
+def filter_users_by_sequence_length(review_data: List[Dict], min_items_per_sequence: int = 8) -> List[Dict]:
+    """
+    Filter users to keep only those with sequences that have at least min_items_per_sequence items.
+    This ensures the model sees longer sequences during training.
+    """
+    # Group by user and create sequences
+    user_sequences = defaultdict(list)
+    for review in review_data:
+        user_id = review.get('user_id')
+        if user_id:
+            user_sequences[user_id].append(review)
+    
+    # Filter users with long enough sequences
+    valid_users = set()
+    for user_id, interactions in user_sequences.items():
+        if len(interactions) >= min_items_per_sequence:
+            valid_users.add(user_id)
+    
+    # Filter review data
+    filtered_data = [review for review in review_data 
+                    if review.get('user_id') in valid_users]
+    
+    logger.info(f"Original users: {len(user_sequences)}")
+    logger.info(f"Users with {min_items_per_sequence}+ items per sequence: {len(valid_users)}")
+    logger.info(f"Original reviews: {len(review_data)}")
+    logger.info(f"Filtered reviews: {len(filtered_data)}")
+    
+    return filtered_data
+
+def create_longer_sequences(df: pd.DataFrame, min_sequence_length: int = 8) -> pd.DataFrame:
+    """
+    Create longer sequences by combining multiple user interactions.
+    This helps the model learn to predict more items before stopping.
+    """
+    df_sorted = df.sort_values(by=['user_id', 'timestamp']).reset_index(drop=True)
+    enhanced_data = []
+    
+    for user_id, user_data in df_sorted.groupby('user_id'):
+        user_data = user_data.reset_index(drop=True)
+        
+        if len(user_data) < min_sequence_length:
+            continue
+            
+        # Create sliding window sequences
+        for i in range(len(user_data) - min_sequence_length + 1):
+            sequence = user_data.iloc[i:i + min_sequence_length]
+            
+            # Create input sequence (first 70% of items)
+            input_length = int(len(sequence) * 0.7)
+            input_sequence = sequence.iloc[:input_length]
+            
+            # Create target sequence (remaining 30% of items)
+            target_sequence = sequence.iloc[input_length:]
+            
+            # Add to enhanced data
+            enhanced_data.append({
+                'user_id': user_id,
+                'input_sequence': input_sequence['parent_asin'].tolist(),
+                'target_sequence': target_sequence['parent_asin'].tolist(),
+                'input_titles': input_sequence['title'].tolist(),
+                'target_titles': target_sequence['title'].tolist(),
+                'timestamp': sequence.iloc[0]['timestamp']
+            })
+    
+    return pd.DataFrame(enhanced_data)
+
 
 def get_next_items(
     df: pd.DataFrame,
