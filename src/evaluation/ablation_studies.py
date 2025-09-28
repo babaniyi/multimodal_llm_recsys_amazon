@@ -205,6 +205,7 @@ class AblationStudy:
             # Image features
             if item_id in image_embeddings:
                 image_vector = image_embeddings[item_id]
+<<<<<<< HEAD
                 # Ensure image vector has same dimension as text vector for concatenation
                 if len(image_vector) != len(text_vector):
                     # Pad or truncate image vector to match text vector size
@@ -214,6 +215,19 @@ class AblationStudy:
                         image_vector = np.pad(image_vector, (0, len(text_vector) - len(image_vector)))
             else:
                 image_vector = np.zeros(len(text_vector))  # Match text vector size
+=======
+                # Resize image vector to match text vector dimension (1000)
+                if len(image_vector) != 1000:
+                    if len(image_vector) > 1000:
+                        image_vector = image_vector[:1000]  # Truncate
+                    else:
+                        # Pad with zeros
+                        padded_vector = np.zeros(1000)
+                        padded_vector[:len(image_vector)] = image_vector
+                        image_vector = padded_vector
+            else:
+                image_vector = np.zeros(1000)  # Match text vector dimension
+>>>>>>> 404062a (improving evaluation metrics with two tracks)
             
             # Concatenate features
             combined_features = np.concatenate([text_vector, image_vector])
@@ -260,6 +274,7 @@ class AblationStudy:
             # Image features
             if item_id in image_embeddings:
                 image_vector = image_embeddings[item_id]
+<<<<<<< HEAD
                 # Ensure image vector has same dimension as text vector for weighted combination
                 if len(image_vector) != len(text_vector):
                     # Pad or truncate image vector to match text vector size
@@ -269,6 +284,19 @@ class AblationStudy:
                         image_vector = np.pad(image_vector, (0, len(text_vector) - len(image_vector)))
             else:
                 image_vector = np.zeros(len(text_vector))  # Match text vector size
+=======
+                # Resize image vector to match text vector dimension (1000)
+                if len(image_vector) != 1000:
+                    if len(image_vector) > 1000:
+                        image_vector = image_vector[:1000]  # Truncate
+                    else:
+                        # Pad with zeros
+                        padded_vector = np.zeros(1000)
+                        padded_vector[:len(image_vector)] = image_vector
+                        image_vector = padded_vector
+            else:
+                image_vector = np.zeros(1000)  # Match text vector dimension
+>>>>>>> 404062a (improving evaluation metrics with two tracks)
             
             # Weighted combination
             combined_features = text_weight * text_vector + image_weight * image_vector
@@ -314,6 +342,7 @@ class AblationStudy:
             # Image features
             if item_id in image_embeddings:
                 image_vector = image_embeddings[item_id]
+<<<<<<< HEAD
                 # Ensure image vector has same dimension as text vector for attention fusion
                 if len(image_vector) != len(text_vector):
                     # Pad or truncate image vector to match text vector size
@@ -323,6 +352,19 @@ class AblationStudy:
                         image_vector = np.pad(image_vector, (0, len(text_vector) - len(image_vector)))
             else:
                 image_vector = np.zeros(len(text_vector))  # Match text vector size
+=======
+                # Resize image vector to match text vector dimension (1000)
+                if len(image_vector) != 1000:
+                    if len(image_vector) > 1000:
+                        image_vector = image_vector[:1000]  # Truncate
+                    else:
+                        # Pad with zeros
+                        padded_vector = np.zeros(1000)
+                        padded_vector[:len(image_vector)] = image_vector
+                        image_vector = padded_vector
+            else:
+                image_vector = np.zeros(1000)  # Match text vector dimension
+>>>>>>> 404062a (improving evaluation metrics with two tracks)
             
             # Attention-based fusion
             # Simple attention: compute attention weights based on feature magnitudes
