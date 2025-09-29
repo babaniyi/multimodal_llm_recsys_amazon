@@ -522,19 +522,16 @@ For questions or issues, please:
 ---
 
 
-# Commands ready to run as soon as training finishes:
-cd /teamspace/studios/this_studio/multimodal_llm_recsys_amazon
-
 # 1. Backup current results
 cp data/processed/result_metrics.json data/processed/result_metrics_backup.json
 
-# 2. Run evaluation pipeline
-python run_enhanced_workflow.py --steps eval
+# 2. Run complete evaluation pipeline
+python run_enhanced_workflow.py --steps process eval baseline cross
 
 # 3. Compare results
 python compare_results.py
 
-# 4. Detailed analysis
+# 4. Detailed analysis  
 python analyze_improvements.py
 
 **Note**: This repository is part of ongoing research. Results may vary based on data preprocessing and hardware configuration. 

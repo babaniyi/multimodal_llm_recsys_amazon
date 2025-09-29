@@ -43,7 +43,7 @@ def analyze_model_outputs():
         item_counts.append(pred_item_count)
     
     # Statistics
-    print("📊 PREDICTION STATISTICS:")
+    print("PREDICTION STATISTICS:")
     print("-" * 30)
     print(f"Average prediction length: {np.mean(prediction_lengths):.2f}")
     print(f"Average items predicted: {np.mean(item_counts):.2f}")
@@ -56,7 +56,7 @@ def analyze_model_outputs():
         print(f"EOS position std: {np.std(eos_positions_valid):.2f}")
     
     # Analyze improvement patterns
-    print("\n🔍 IMPROVEMENT PATTERNS:")
+    print("\nIMPROVEMENT PATTERNS:")
     print("-" * 30)
     
     # Check if model is learning to stop earlier
@@ -99,7 +99,7 @@ def analyze_ground_truth_patterns():
         gt_item_counts.append(gt_item_count)
         gt_eos_positions.append(gt_eos_pos)
     
-    print("📊 GROUND TRUTH STATISTICS:")
+    print("GROUND TRUTH STATISTICS:")
     print("-" * 30)
     print(f"Average GT length: {np.mean(gt_lengths):.2f}")
     print(f"Average GT items: {np.mean(gt_item_counts):.2f}")
@@ -111,7 +111,7 @@ def analyze_ground_truth_patterns():
         print(f"Average GT EOS position: {np.mean(gt_eos_positions_valid):.2f}")
     
     # Task difficulty analysis
-    print("\n🎯 TASK DIFFICULTY ANALYSIS:")
+    print("\nTASK DIFFICULTY ANALYSIS:")
     print("-" * 30)
     
     # How many users actually buy multiple items?
@@ -127,7 +127,7 @@ def main():
     analyze_model_outputs()
     analyze_ground_truth_patterns()
     
-    print("\n💡 KEY INSIGHTS:")
+    print("\nKEY INSIGHTS:")
     print("-" * 30)
     print("1. Check if model is predicting fewer items (learning to stop)")
     print("2. Check if EOS positions are getting closer to ground truth")

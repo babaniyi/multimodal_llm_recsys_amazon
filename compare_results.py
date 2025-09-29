@@ -40,14 +40,14 @@ def main():
     new_results = load_results('data/processed/result_metrics.json')
     
     if not new_results:
-        print("❌ No new results found. Run evaluation first!")
+        print("No new results found. Run evaluation first!")
         return
     
-    print("📊 KEY METRICS COMPARISON:")
+    print("KEY METRICS COMPARISON:")
     print("=" * 60)
     
     # Track A: Item Recommendation Quality
-    print("\n🎯 TRACK A: ITEM RECOMMENDATION QUALITY")
+    print("\nTRACK A: ITEM RECOMMENDATION QUALITY")
     print("-" * 40)
     
     metrics_track_a = [
@@ -64,7 +64,7 @@ def main():
         print(f"{metric:20}: {comparison}")
     
     # Track B: Stop Prediction Quality
-    print("\n🛑 TRACK B: STOP PREDICTION QUALITY")
+    print("\nTRACK B: STOP PREDICTION QUALITY")
     print("-" * 40)
     
     metrics_track_b = [
@@ -78,39 +78,39 @@ def main():
         print(f"{metric:20}: {comparison}")
     
     # Overall Assessment
-    print("\n📈 OVERALL ASSESSMENT")
+    print("\nOVERALL ASSESSMENT")
     print("-" * 40)
     
     if new_results.get('item_hitrate@10', {}).get('mean', 0) > 0.01:
-        print("✅ Item recommendation: IMPROVED")
+        print("Item recommendation: IMPROVED")
     else:
-        print("❌ Item recommendation: Still needs work")
+        print("Item recommendation: Still needs work")
     
     if new_results.get('stop_hit@10', {}).get('mean', 0) > 0.1:
-        print("✅ Stop prediction: IMPROVED")
+        print("Stop prediction: IMPROVED")
     else:
-        print("❌ Stop prediction: Still needs work")
+        print("Stop prediction: Still needs work")
     
     # Recommendations
-    print("\n💡 NEXT STEPS:")
+    print("\nNEXT STEPS:")
     print("-" * 40)
     
     item_hit = new_results.get('item_hitrate@10', {}).get('mean', 0)
     stop_hit = new_results.get('stop_hit@10', {}).get('mean', 0)
     
     if item_hit < 0.01 and stop_hit < 0.1:
-        print("1. 🔧 Model Architecture: Consider adding separate heads for items vs stops")
-        print("2. 📚 Data Quality: Need more diverse training examples")
-        print("3. ⚙️ Hyperparameters: Try different learning rates and batch sizes")
+        print("1. Model Architecture: Consider adding separate heads for items vs stops")
+        print("2. Data Quality: Need more diverse training examples")
+        print("3. Hyperparameters: Try different learning rates and batch sizes")
     elif item_hit < 0.01:
-        print("1. 🎯 Focus on Item Recommendation: Model needs better item understanding")
-        print("2. 🔍 Analyze what items the model is predicting vs ground truth")
+        print("1. Focus on Item Recommendation: Model needs better item understanding")
+        print("2. Analyze what items the model is predicting vs ground truth")
     elif stop_hit < 0.1:
-        print("1. 🛑 Focus on Stop Prediction: Increase stop prediction weight")
-        print("2. 📊 Add more stop examples to training data")
+        print("1. Focus on Stop Prediction: Increase stop prediction weight")
+        print("2. Add more stop examples to training data")
     else:
-        print("1. 🎉 Great progress! Consider Phase 2 improvements")
-        print("2. 🔄 Fine-tune hyperparameters for further gains")
+        print("1. Great progress! Consider Phase 2 improvements")
+        print("2. Fine-tune hyperparameters for further gains")
     
     # Save comparison for future reference
     comparison_data = {
@@ -128,7 +128,7 @@ def main():
     with open('data/processed/performance_comparison.json', 'w') as f:
         json.dump(comparison_data, f, indent=2)
     
-    print(f"\n💾 Comparison saved to: data/processed/performance_comparison.json")
+    print(f"\nComparison saved to: data/processed/performance_comparison.json")
 
 if __name__ == "__main__":
     main()
