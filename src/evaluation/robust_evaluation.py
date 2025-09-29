@@ -10,7 +10,7 @@ from typing import List, Dict, Tuple, Any
 from pathlib import Path
 import logging
 from scipy import stats
-from sklearn.metrics import precision_score, recall_score, ndcg_score
+from src.evaluation.metrics import calculate_metrics
 from collections import defaultdict
 import random
 import time
@@ -35,110 +35,21 @@ class RobustEvaluator:
         
     def calculate_metrics_robust(self, predictions: List[List[str]], targets: List[List[str]], k: int = 10) -> Dict[str, float]:
         """
-        Calculate metrics with proper handling of edge cases.
+        Calculate two-track metrics with proper handling of edge cases.
         """
-        metrics = {}
-        
         if not predictions or not targets:
             logger.warning("Empty predictions or targets")
-            return {f'hr@{k}': 0.0, f'precision@{k}': 0.0, f'recall@{k}': 0.0, 
-                   f'ndcg@{k}': 0.0, 'mrr': 0.0, 'map': 0.0, 'coverage': 0.0, 
-                   'diversity': 0.0, 'novelty': 0.0}
+            return {
+                f'item_precision@{k}': 0.0, f'item_recall@{k}': 0.0, f'item_hitrate@{k}': 0.0,
+                f'item_ndcg@{k}': 0.0, 'item_mrr': 0.0, 'item_map': 0.0,
+                f'item_coverage@{k}': 0.0, f'item_diversity@{k}': 0.0, f'item_novelty@{k}': 0.0,
+                f'stop_hit@{k}': 0.0, f'stop_ndcg@{k}': 0.0,
+                'stop_rank_median': None, 'stop_rank_mean': None, 'stop_rank_std': None,
+                'stop_prediction_rate': 0.0
+            }
         
-        # Calculate Hit Rate@k
-        hits = 0
-        total = len(predictions)
-        for pred, target in zip(predictions, targets):
-            if any(item in target for item in pred[:k]):
-                hits += 1
-        metrics[f'hr@{k}'] = hits / total if total > 0 else 0.0
-        
-        # Calculate Precision@k
-        total_precision = 0
-        for pred, target in zip(predictions, targets):
-            hits = len(set(pred[:k]) & set(target))
-            total_precision += hits / k if k > 0 else 0
-        metrics[f'precision@{k}'] = total_precision / total if total > 0 else 0.0
-        
-        # Calculate Recall@k
-        total_recall = 0
-        for pred, target in zip(predictions, targets):
-            hits = len(set(pred[:k]) & set(target))
-            total_recall += hits / len(target) if len(target) > 0 else 0
-        metrics[f'recall@{k}'] = total_recall / total if total > 0 else 0.0
-        
-        # Calculate NDCG@k
-        total_ndcg = 0
-        for pred, target in zip(predictions, targets):
-            dcg = 0
-            idcg = 1  # Since we're dealing with binary relevance
-            for i, item in enumerate(pred[:k]):
-                if item in target:
-                    dcg += 1 / np.log2(i + 2)  # +2 because log2(1) = 0
-            total_ndcg += dcg / idcg
-        metrics[f'ndcg@{k}'] = total_ndcg / total if total > 0 else 0.0
-        
-        # Calculate MRR (Mean Reciprocal Rank)
-        total_mrr = 0
-        for pred, target in zip(predictions, targets):
-            for i, item in enumerate(pred):
-                if item in target:
-                    total_mrr += 1 / (i + 1)
-                    break
-        metrics['mrr'] = total_mrr / total if total > 0 else 0.0
-        
-        # Calculate MAP (Mean Average Precision)
-        total_map = 0
-        for pred, target in zip(predictions, targets):
-            ap = 0
-            hits = 0
-            for i, item in enumerate(pred):
-                if item in target:
-                    hits += 1
-                    ap += hits / (i + 1)
-            if hits > 0:
-                ap /= hits
-            total_map += ap
-        metrics['map'] = total_map / total if total > 0 else 0.0
-        
-        # Calculate Coverage
-        all_items = set()
-        recommended_items = set()
-        for pred in predictions:
-            recommended_items.update(pred[:k])
-        for target in targets:
-            all_items.update(target)
-        metrics['coverage'] = len(recommended_items) / len(all_items) if len(all_items) > 0 else 0.0
-        
-        # Calculate Diversity (using Jaccard similarity)
-        total_diversity = 0
-        count = 0
-        for i in range(len(predictions)):
-            for j in range(i + 1, len(predictions)):
-                pred1 = set(predictions[i][:k])
-                pred2 = set(predictions[j][:k])
-                intersection = len(pred1 & pred2)
-                union = len(pred1 | pred2)
-                if union > 0:
-                    total_diversity += 1 - (intersection / union)
-                    count += 1
-        metrics['diversity'] = total_diversity / count if count > 0 else 0.0
-        
-        # Calculate Novelty (using popularity-based approach)
-        item_counts = {}
-        for pred in predictions:
-            for item in pred[:k]:
-                item_counts[item] = item_counts.get(item, 0) + 1
-        
-        total_novelty = 0
-        for pred in predictions:
-            pred_novelty = 0
-            for item in pred[:k]:
-                pred_novelty += 1 / (item_counts[item] + 1)  # +1 to avoid division by zero
-            total_novelty += pred_novelty / k if k > 0 else 0
-        metrics['novelty'] = total_novelty / len(predictions) if len(predictions) > 0 else 0.0
-        
-        return metrics
+        # Use the new two-track metrics system
+        return calculate_metrics(predictions, targets, k)
     
     def run_multiple_evaluations(self, model_predictions: Dict[str, List[List[str]]], 
                                 targets: List[List[str]], k: int = 10) -> Dict[str, Dict[str, Any]]:
@@ -150,8 +61,8 @@ class RobustEvaluator:
         for model_name, predictions in model_predictions.items():
             logger.info(f"Running {self.num_runs} evaluations for {model_name}")
             
-            # Store metrics for each run
-            run_metrics = {metric: [] for metric in ['hr', 'precision', 'recall', 'ndcg', 'mrr', 'map', 'coverage', 'diversity', 'novelty']}
+            # Store metrics for each run - initialize with two-track metric names
+            run_metrics = defaultdict(list)
             
             for run in range(self.num_runs):
                 # Set random seed for reproducibility
@@ -168,8 +79,8 @@ class RobustEvaluator:
                 
                 # Store metrics
                 for metric_name, value in metrics.items():
-                    base_metric = metric_name.split('@')[0] if '@' in metric_name else metric_name
-                    run_metrics[base_metric].append(value)
+                    # Keep the full metric name for two-track metrics
+                    run_metrics[metric_name].append(value)
             
             # Calculate statistics
             model_results = {}
@@ -179,7 +90,8 @@ class RobustEvaluator:
                     std_val = np.std(values)
                     ci_lower, ci_upper = self._calculate_confidence_interval(values)
                     
-                    model_results[f'{metric_name}@{k}'] = {
+                    # Use the metric name as-is for two-track metrics
+                    model_results[metric_name] = {
                         'mean': mean_val,
                         'std': std_val,
                         'ci_lower': ci_lower,

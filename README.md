@@ -311,52 +311,115 @@ See [vision_models.md](vision_models.md) for detailed information.
 
 ## Evaluation
 
-### Metrics
+### Two-Track Evaluation System
 
-The system evaluates recommendations using multiple metrics:
+The system uses a sophisticated two-track evaluation approach that separates two different skills:
 
-- **Precision@K**: Accuracy of top-K recommendations
-- **Recall@K**: Coverage of relevant items in top-K
-- **NDCG@K**: Normalized Discounted Cumulative Gain
-- **MRR**: Mean Reciprocal Rank
-- **Diversity**: Recommendation diversity measures
+#### Track A: Item Recommendation Quality (Exclude EOS)
+Measures the model's ability to recommend actual products, excluding `<|endoftext|>` tokens:
 
-### Evaluation Commands
+- **Item Precision@K**: Accuracy of top-K product recommendations
+- **Item Recall@K**: Coverage of relevant products in top-K
+- **Item NDCG@K**: Normalized Discounted Cumulative Gain for products
+- **Item MRR**: Mean Reciprocal Rank for products
+- **Item Coverage@K**: Percentage of catalog items recommended
+- **Item Diversity@K**: Recommendation diversity measures
+- **Item Novelty@K**: Novelty of recommended products
+
+#### Track B: Stop Prediction Quality (EOS Prediction)
+Measures the model's ability to correctly predict when to stop recommending:
+
+- **Stop Hit@K**: Whether model correctly predicts EOS when ground truth has EOS
+- **Stop NDCG@K**: Position-sensitive metric for EOS prediction accuracy
+- **Stop Rank**: Rank of first EOS prediction
+- **Stop Prediction Rate**: Percentage of predictions that include EOS
+
+### Enhanced Evaluation Pipeline
+
+The system includes a comprehensive evaluation pipeline with multiple components:
 
 ```bash
-python -m src.evaluation.process_model_outputs
-# Evaluate trained model
+# Run complete evaluation pipeline
+python run_enhanced_workflow.py
 
-
-# Compare with baselines
-python -m src.evaluation.compare_baselines
+# Run specific evaluation steps
+python run_enhanced_workflow.py --steps eval
+python run_enhanced_workflow.py --steps baseline
+python run_enhanced_workflow.py --steps cross
 ```
+
+### Evaluation Components
+
+1. **Robust Evaluation**: Multiple runs with statistical testing and confidence intervals
+2. **Baseline Comparison**: Traditional and multimodal baseline methods
+3. **Ablation Studies**: Text-only, image-only, and fusion method analysis
+4. **Cross-Category Analysis**: Performance across different product categories
+5. **Main Evaluation**: Comprehensive results consolidation
 
 ### Baselines
 
-The system includes several baseline methods for comparison:
+The system includes comprehensive baseline methods for comparison:
 
-- **Text-only GPT-2**: Traditional language model approach
-- **Image-only ResNet**: Vision-based recommendations
-- **Collaborative Filtering**: Matrix factorization
-- **Content-based**: TF-IDF similarity
+#### Traditional Baselines
+- **Collaborative Filtering**: Matrix factorization approach
+- **Content-Based**: TF-IDF similarity recommendations
+- **Popularity-Based**: Most popular items recommendations
+- **Matrix Factorization**: SVD-based recommendations
+
+#### Multimodal Baselines
+- **VBPR**: Visual Bayesian Personalized Ranking
+- **DeepCoNN**: Deep Cooperative Neural Networks
+- **NRMF**: Neural Rating Matrix Factorization
+- **SASRec**: Self-Attentive Sequential Recommendation
 
 ## Results
 
-### Performance Comparison
+### Two-Track Evaluation Results
 
-| Method | Precision@10 | Recall@10 | NDCG@10 | MRR |
-|--------|-------------|-----------|---------|-----|
-| Text-only | 0.234 | 0.156 | 0.189 | 0.123 |
-| Image-only | 0.198 | 0.134 | 0.167 | 0.098 |
-| **Multimodal (Ours)** | **0.287** | **0.201** | **0.234** | **0.156** |
+The evaluation reveals the model's performance across two distinct skills:
+
+#### Track A: Item Recommendation Quality
+| Metric | Value | Interpretation |
+|--------|-------|----------------|
+| Item Precision@10 | 0.00018 (0.018%) | Very low precision - few relevant recommendations |
+| Item Recall@10 | 0.00057 (0.057%) | Low recall - missing many relevant items |
+| Item Hit Rate@10 | 0.0018 (0.18%) | Low hit rate - rarely finding relevant items |
+| Item NDCG@10 | 0.00051 (0.051%) | Poor ranking quality |
+| Item MRR | 0.00094 (0.094%) | Low reciprocal rank |
+| Item Coverage@10 | 0.117 (11.7%) | Good catalog coverage |
+| Item Diversity@10 | 0.920 (92%) | Excellent recommendation diversity |
+
+#### Track B: Stop Prediction Quality
+| Metric | Value | Interpretation |
+|--------|-------|----------------|
+| Stop Hit@10 | 0.0356 (3.56%) | Low stop prediction accuracy |
+| Stop NDCG@10 | 0.0688 (6.88%) | Poor position-sensitive stopping |
+| Stop Prediction Rate | 0.0386 (3.86%) | Rarely predicts stops |
+| Stop Rank (median) | 1.0 | When stops are predicted, they're at rank 1 |
 
 ### Key Findings
 
-1. **Multimodal fusion improves accuracy** by 22.6% over text-only baseline
-2. **Visual information provides complementary signals** not captured in text
-3. **LoRA fine-tuning** achieves comparable performance with 90% fewer parameters
-4. **ResNet-50** provides the best accuracy-speed trade-off
+1. **Conservative Model Behavior**: The model is extremely conservative, rarely recommending actual products
+2. **Poor Item Recommendation**: Very low precision and recall for actual product recommendations
+3. **Excellent Diversity**: When the model does recommend products, they are highly diverse (92%)
+4. **Good Coverage**: The model covers 11.7% of the available catalog
+5. **Low Stop Prediction**: The model rarely predicts when to stop recommending
+
+### Model Performance Analysis
+
+The two-track evaluation reveals that the current model:
+- **Prioritizes safety over recommendations** (very conservative approach)
+- **Struggles with actual product recommendations** (low hit rate)
+- **Provides diverse recommendations** when it does recommend
+- **Has room for significant improvement** in both tracks
+
+### Recommendations for Improvement
+
+1. **Increase recommendation confidence**: Model is too conservative
+2. **Balance stopping vs. recommending**: Current model rarely recommends
+3. **Fine-tune on item recommendation**: Focus training on actual products
+4. **Implement better data filtering**: Improve training data quality
+5. **Consider ensemble methods**: Combine multiple approaches
 
 ## Configuration
 

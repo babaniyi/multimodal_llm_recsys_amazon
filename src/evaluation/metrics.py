@@ -38,29 +38,69 @@ def split_items(seq: List[str]) -> Tuple[List[str], int]:
     return items, first_eos_rank
 
 def precision_at_k_items(pred: List[str], truth: List[str], k: int = 10) -> float:
-    """Calculate precision@k for items only (excluding EOS)."""
+    """
+    Calculate precision@k for items only (excluding EOS).
+    
+    Args:
+        pred: Predicted sequence
+        truth: Ground truth sequence
+        k: Number of items to consider
+        
+    Returns:
+        Precision@k for items only
+    """
     p_items, _ = split_items(pred[:k])
     t_items, _ = split_items(truth[:k])
     hits = len(set(p_items) & set(t_items))
-    return hits / k
+    return hits / k  # Standard precision@k definition
 
 def recall_at_k_items(pred: List[str], truth: List[str], k: int = 10) -> float:
-    """Calculate recall@k for items only (excluding EOS)."""
+    """
+    Calculate recall@k for items only (excluding EOS).
+    
+    Args:
+        pred: Predicted sequence
+        truth: Ground truth sequence
+        k: Number of items to consider
+        
+    Returns:
+        Recall@k for items only
+    """
     p_items, _ = split_items(pred[:k])
     t_items, _ = split_items(truth[:k])
     if len(t_items) == 0:
-        return 0.0
+        return 0.0  # No real items to recall
     hits = len(set(p_items) & set(t_items))
     return hits / len(t_items)
 
 def hitrate_at_k_items(pred: List[str], truth: List[str], k: int = 10) -> float:
-    """Calculate hit rate@k for items only (excluding EOS)."""
+    """
+    Calculate hit rate@k for items only (excluding EOS).
+    
+    Args:
+        pred: Predicted sequence
+        truth: Ground truth sequence
+        k: Number of items to consider
+        
+    Returns:
+        1.0 if any ground truth item appears in predictions, 0.0 otherwise
+    """
     p_items, _ = split_items(pred[:k])
     t_items, _ = split_items(truth[:k])
     return 1.0 if len(set(p_items) & set(t_items)) > 0 else 0.0
 
 def ndcg_at_k_items(pred: List[str], truth: List[str], k: int = 10) -> float:
-    """Calculate NDCG@k for items only (excluding EOS)."""
+    """
+    Calculate NDCG@k for items only (excluding EOS).
+    
+    Args:
+        pred: Predicted sequence
+        truth: Ground truth sequence
+        k: Number of items to consider
+        
+    Returns:
+        NDCG@k for items only
+    """
     p_items, _ = split_items(pred[:k])
     t_items, _ = split_items(truth[:k])
     
@@ -75,11 +115,13 @@ def ndcg_at_k_items(pred: List[str], truth: List[str], k: int = 10) -> float:
     if len(t_items) == 0:
         return 0.0
     
+    # Calculate DCG
     dcg = 0.0
     for i, item in enumerate(p_items):
         if item in t_items:
-            dcg += 1.0 / math.log2(i + 2)
+            dcg += 1.0 / math.log2(i + 2)  # +2 because log2(1) = 0
     
+    # Calculate IDCG (ideal DCG)
     idcg = 0.0
     for i in range(min(len(t_items), k)):
         idcg += 1.0 / math.log2(i + 2)
@@ -87,7 +129,16 @@ def ndcg_at_k_items(pred: List[str], truth: List[str], k: int = 10) -> float:
     return dcg / idcg if idcg > 0 else 0.0
 
 def mrr_items(pred: List[str], truth: List[str]) -> float:
-    """Calculate MRR for items only (excluding EOS)."""
+    """
+    Calculate MRR for items only (excluding EOS).
+    
+    Args:
+        pred: Predicted sequence
+        truth: Ground truth sequence
+        
+    Returns:
+        MRR for items only
+    """
     p_items, _ = split_items(pred)
     t_items, _ = split_items(truth)
     
@@ -100,7 +151,16 @@ def mrr_items(pred: List[str], truth: List[str]) -> float:
     return 0.0
 
 def map_items(pred: List[str], truth: List[str]) -> float:
-    """Calculate MAP for items only (excluding EOS)."""
+    """
+    Calculate MAP for items only (excluding EOS).
+    
+    Args:
+        pred: Predicted sequence
+        truth: Ground truth sequence
+        
+    Returns:
+        MAP for items only
+    """
     p_items, _ = split_items(pred)
     t_items, _ = split_items(truth)
     
@@ -169,23 +229,52 @@ def map_items(pred: List[str], truth: List[str]) -> float:
     return ap / len(t_items) if len(t_items) > 0 else 0.0
 
 def stop_hit_at_k(pred: List[str], truth: List[str], k: int = 10) -> float:
-    """Calculate StopHit@k - whether model correctly predicts EOS when ground truth has EOS."""
+    """
+    Calculate StopHit@k - whether model correctly predicts EOS when ground truth has EOS.
+    
+    Args:
+        pred: Predicted sequence
+        truth: Ground truth sequence
+        k: Number of items to consider
+        
+    Returns:
+        1.0 if truth has EOS in next-k AND pred has EOS in top-k, 0.0 otherwise
+    """
     _, t_first_eos = split_items(truth[:k])
     _, p_first_eos = split_items(pred[:k])
     return 1.0 if (t_first_eos is not None and p_first_eos is not None) else 0.0
 
 def stop_rank(pred: List[str], k: int = 10) -> Union[int, None]:
-    """Calculate StopRank - rank of first EOS prediction."""
+    """
+    Calculate StopRank - rank of first EOS prediction.
+    
+    Args:
+        pred: Predicted sequence
+        k: Number of items to consider
+        
+    Returns:
+        Rank (1-indexed) of first EOS, None if no EOS predicted
+    """
     _, p_first_eos = split_items(pred[:k])
     return p_first_eos
 
 def stop_ndcg_at_k(pred: List[str], truth: List[str], k: int = 10) -> float:
-    """Calculate Stop-nDCG@k - position-sensitive metric for EOS prediction."""
+    """
+    Calculate Stop-nDCG@k - position-sensitive metric for EOS prediction.
+    
+    Args:
+        pred: Predicted sequence
+        truth: Ground truth sequence
+        k: Number of items to consider
+        
+    Returns:
+        Stop-nDCG@k score
+    """
     _, t_first_eos = split_items(truth[:k])
     _, p_first_eos = split_items(pred[:k])
     
     if t_first_eos is None:
-        return 0.0
+        return 0.0  # No stop in truth; don't reward predicting stop
     
     ideal = 1.0 / math.log2(1 + t_first_eos)
     dcg = 0.0 if p_first_eos is None else 1.0 / math.log2(1 + p_first_eos)
@@ -193,8 +282,22 @@ def stop_ndcg_at_k(pred: List[str], truth: List[str], k: int = 10) -> float:
     return dcg / ideal if ideal > 0 else 0.0
 
 def coverage_items(predictions: List[List[str]], targets: List[List[str]], k: int = 10) -> float:
+<<<<<<< HEAD
     """Calculate coverage for items only (excluding EOS)."""
 >>>>>>> 404062a (improving evaluation metrics with two tracks)
+=======
+    """
+    Calculate coverage for items only (excluding EOS).
+    
+    Args:
+        predictions: List of predicted sequences
+        targets: List of target sequences
+        k: Number of items to consider
+        
+    Returns:
+        Coverage@k for items only
+    """
+>>>>>>> 551c909 (fixing evluation and model performance)
     all_items = set()
     recommended_items = set()
     
@@ -209,7 +312,16 @@ def coverage_items(predictions: List[List[str]], targets: List[List[str]], k: in
     return len(recommended_items) / len(all_items) if len(all_items) > 0 else 0.0
 
 def diversity_items(predictions: List[List[str]], k: int = 10) -> float:
-    """Calculate diversity for items only (excluding EOS)."""
+    """
+    Calculate diversity for items only (excluding EOS).
+    
+    Args:
+        predictions: List of predicted sequences
+        k: Number of items to consider
+        
+    Returns:
+        Diversity@k for items only
+    """
     total_diversity = 0.0
     count = 0
     
@@ -231,7 +343,16 @@ def diversity_items(predictions: List[List[str]], k: int = 10) -> float:
     return total_diversity / count if count > 0 else 0.0
 
 def novelty_items(predictions: List[List[str]], k: int = 10) -> float:
-    """Calculate novelty for items only (excluding EOS)."""
+    """
+    Calculate novelty for items only (excluding EOS).
+    
+    Args:
+        predictions: List of predicted sequences
+        k: Number of items to consider
+        
+    Returns:
+        Novelty@k for items only
+    """
     item_counts = {}
     
     for pred in predictions:
@@ -244,13 +365,23 @@ def novelty_items(predictions: List[List[str]], k: int = 10) -> float:
         p_items, _ = split_items(pred[:k])
         pred_novelty = 0.0
         for item in p_items:
-            pred_novelty += 1 / (item_counts[item] + 1)
+            pred_novelty += 1 / (item_counts[item] + 1)  # +1 to avoid division by zero
         total_novelty += pred_novelty / max(1, len(p_items))
     
     return total_novelty / len(predictions)
 
 def calculate_two_track_metrics(predictions: List[List[str]], targets: List[List[str]], k: int = 10) -> Dict[str, float]:
-    """Calculate comprehensive two-track metrics."""
+    """
+    Calculate comprehensive two-track metrics.
+    
+    Args:
+        predictions: List of predicted sequences
+        targets: List of target sequences
+        k: Number of items to consider
+        
+    Returns:
+        Dictionary with two-track metrics
+    """
     metrics = {}
     
     # Track A: Item-only metrics (exclude EOS)
@@ -270,7 +401,7 @@ def calculate_two_track_metrics(predictions: List[List[str]], targets: List[List
     
     # Calculate stop rank statistics
     stop_ranks = [stop_rank(pred, k) for pred in predictions]
-    stop_ranks = [r for r in stop_ranks if r is not None]
+    stop_ranks = [r for r in stop_ranks if r is not None]  # Remove None values
     
     if stop_ranks:
         metrics['stop_rank_median'] = np.median(stop_ranks)

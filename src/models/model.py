@@ -465,7 +465,7 @@ def token_ids_to_text(token_ids, tokenizer):
 
 
 def calc_loss_batch(input_batch, target_batch, model, device):
-    """Calculate loss for a batch of data."""
+    """Calculate loss for a batch of data with weighted stop prediction."""
     input_batch = input_batch.to(device)
     target_batch = target_batch.to(device)
     
@@ -478,10 +478,19 @@ def calc_loss_batch(input_batch, target_batch, model, device):
     if torch.isnan(logits).any() or torch.isinf(logits).any():
         logger.error("NaN or Inf detected in logits")
     
-    # Calculate loss
+    # Get EOS token ID (assuming it's the last token in vocab)
+    eos_token_id = logits.shape[-1] - 1  # Adjust based on your tokenizer
+    
+    # Create weights for loss calculation
+    # Give higher weight to EOS predictions to improve stop prediction
+    weights = torch.ones(logits.shape[-1], device=device)
+    weights[eos_token_id] = 2.0  # Double weight for EOS token
+    
+    # Calculate weighted loss
     loss = torch.nn.functional.cross_entropy(
         logits.flatten(0, 1),
-        target_batch.flatten()
+        target_batch.flatten(),
+        weight=weights
     )
 
     # Check for NaN or Inf values in loss

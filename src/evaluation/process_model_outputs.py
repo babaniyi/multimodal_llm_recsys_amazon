@@ -22,11 +22,9 @@ for entry in data:
     # Split the model_response into items
     model_response_items = entry['model_response'].split(', ')
     
-    # Truncate or pad the model_response to num_items
-    if len(model_response_items) < num_items:
-        model_response_items.extend(['<|endoftext|>'] * (num_items - len(model_response_items)))
-    else:
-        model_response_items = model_response_items[:num_items]
+    # Truncate to num_items (but DON'T pad with artificial EOS tokens)
+    # The model's actual predictions should be preserved as-is
+    model_response_items = model_response_items[:num_items]
     
     # Join the items back into a string
     entry['model_response'] = ', '.join(model_response_items)

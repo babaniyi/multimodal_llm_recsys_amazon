@@ -56,8 +56,10 @@
     },
     "training_config": {
         "num_epochs": 10,
-        "learning_rate": 3e-5,
+        "learning_rate": 5e-6,
         "min_learning_rate": 1e-6,
+        "stop_prediction_weight": 2.0,
+        "item_prediction_weight": 1.0,
         "weight_decay": 0.01,
         "max_grad_norm": 1.0,
         "save_every": 100,

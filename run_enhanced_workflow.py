@@ -235,8 +235,22 @@ def main():
     else:
         logger.info("Step 7: Cross-Category Analysis (skipped)")
     
-    # Step 8: Generate Summary Report
-    logger.info("Step 8: Generating Summary Report")
+    # Step 8: Main Evaluation (Generate Comprehensive Results)
+    if "eval" in steps_to_run:
+        logger.info("Step 8: Main Evaluation")
+        logger.info("=" * 60)
+        success = run_command(
+            "python -m src.evaluation.main_evaluation",
+            "Generating comprehensive evaluation results"
+        )
+        if not success:
+            logger.error("Main evaluation failed. Exiting.")
+            return
+    else:
+        logger.info("Step 8: Main Evaluation (skipped)")
+    
+    # Step 9: Generate Summary Report
+    logger.info("Step 9: Generating Summary Report")
     logger.info("=" * 60)
     
     # Check for results files
