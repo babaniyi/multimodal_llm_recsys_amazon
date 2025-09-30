@@ -86,26 +86,46 @@ class RobustEvaluator:
             model_results = {}
             for metric_name, values in run_metrics.items():
                 if values:
-                    mean_val = np.mean(values)
-                    std_val = np.std(values)
-                    ci_lower, ci_upper = self._calculate_confidence_interval(values)
-                    
-                    # Use the metric name as-is for two-track metrics
-                    model_results[metric_name] = {
-                        'mean': mean_val,
-                        'std': std_val,
-                        'ci_lower': ci_lower,
-                        'ci_upper': ci_upper,
-                        'values': values
-                    }
+                    # Filter out None values for metrics that can have None
+                    filtered_values = [v for v in values if v is not None]
+                    if filtered_values:
+                        mean_val = np.mean(filtered_values)
+                        std_val = np.std(filtered_values)
+                        ci_lower, ci_upper = self._calculate_confidence_interval(filtered_values)
+                        
+                        # Use the metric name as-is for two-track metrics
+                        model_results[metric_name] = {
+                            'mean': mean_val,
+                            'std': std_val,
+                            'ci_lower': ci_lower,
+                            'ci_upper': ci_upper,
+                            'values': filtered_values
+                        }
+                    else:
+                        # All values were None
+                        model_results[metric_name] = {
+                            'mean': None,
+                            'std': None,
+                            'ci_lower': None,
+                            'ci_upper': None,
+                            'values': values
+                        }
             
             results[model_name] = model_results
             
             # Log results
             logger.info(f"Results for {model_name} (mean ± std, 95% CI):")
             for metric_name, stats_dict in model_results.items():
-                logger.info(f"  {metric_name}: {stats_dict['mean']:.4f} ± {stats_dict['std']:.4f} "
-                          f"[{stats_dict['ci_lower']:.4f}, {stats_dict['ci_upper']:.4f}]")
+                mean_val = stats_dict['mean']
+                std_val = stats_dict['std']
+                ci_lower = stats_dict['ci_lower']
+                ci_upper = stats_dict['ci_upper']
+                
+                if mean_val is not None and std_val is not None:
+                    logger.info(f"  {metric_name}: {mean_val:.4f} ± {std_val:.4f} "
+                               f"[{ci_lower:.4f}, {ci_upper:.4f}]")
+                else:
+                    logger.info(f"  {metric_name}: None (all values were None)")
         
         return results
     
@@ -150,15 +170,38 @@ class RobustEvaluator:
                     baseline_values = results[baseline_model][metric_name]['values']
                     model_values = stats_dict['values']
                     
-                    # Perform paired t-test
-                    if len(baseline_values) == len(model_values) and len(baseline_values) > 1:
-                        t_stat, p_value = stats.ttest_rel(model_values, baseline_values)
-                        
+                    # Filter out None values for statistical testing
+                    baseline_values_clean = [v for v in baseline_values if v is not None]
+                    model_values_clean = [v for v in model_values if v is not None]
+                    
+                    # Perform paired t-test only if we have valid values
+                    if (len(baseline_values_clean) == len(model_values_clean) and 
+                        len(baseline_values_clean) > 1 and 
+                        len(model_values_clean) > 1):
+                        try:
+                            t_stat, p_value = stats.ttest_rel(model_values_clean, baseline_values_clean)
+                            
+                            significance_results[model_name][metric_name] = {
+                                't_statistic': t_stat,
+                                'p_value': p_value,
+                                'significant': p_value < self.alpha,
+                                'effect_size': self._calculate_cohens_d(model_values_clean, baseline_values_clean)
+                            }
+                        except (ValueError, TypeError) as e:
+                            logger.warning(f"Statistical test failed for {model_name} {metric_name}: {e}")
+                            significance_results[model_name][metric_name] = {
+                                't_statistic': None,
+                                'p_value': None,
+                                'significant': False,
+                                'effect_size': 0.0
+                            }
+                    else:
+                        # Not enough valid values for statistical testing
                         significance_results[model_name][metric_name] = {
-                            't_statistic': t_stat,
-                            'p_value': p_value,
-                            'significant': p_value < self.alpha,
-                            'effect_size': self._calculate_cohens_d(model_values, baseline_values)
+                            't_statistic': None,
+                            'p_value': None,
+                            'significant': False,
+                            'effect_size': 0.0
                         }
         
         return significance_results

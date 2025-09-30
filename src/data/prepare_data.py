@@ -243,6 +243,10 @@ def main():
 
     df_model_ready = merged_df.copy()
 
+    # Create proper input format matching LLMs-for-RecSys approach
+    df_model_ready['input'] = df_model_ready['user_id'].apply(lambda x: f"<|user_{x}|>")
+    
+    # Rename columns to match expected format
     df_model_ready = df_model_ready.rename(columns={'next_items': "output", 'next_item_names': "output_names"})
     df_model_ready['instruction'] = config['data_config']['user_prompt']
 

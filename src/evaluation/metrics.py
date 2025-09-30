@@ -104,14 +104,6 @@ def ndcg_at_k_items(pred: List[str], truth: List[str], k: int = 10) -> float:
     p_items, _ = split_items(pred[:k])
     t_items, _ = split_items(truth[:k])
     
-<<<<<<< HEAD
-    # Calculate Hit Rate@k (treating <|endoftext|> as valid predictions)
-    hits = 0
-    total = len(predictions)
-    for pred, target in zip(predictions, targets):
-        # Check if any predicted item (including <|endoftext|>) matches target
-        if any(item in target for item in pred[:k]):
-=======
     if len(t_items) == 0:
         return 0.0
     
@@ -171,61 +163,9 @@ def map_items(pred: List[str], truth: List[str]) -> float:
     hits = 0
     for i, item in enumerate(p_items):
         if item in t_items:
->>>>>>> 404062a (improving evaluation metrics with two tracks)
             hits += 1
             ap += hits / (i + 1)
     
-<<<<<<< HEAD
-    # Calculate Precision@k (treating <|endoftext|> as valid predictions)
-    total_precision = 0
-    for pred, target in zip(predictions, targets):
-        hits = len(set(pred[:k]) & set(target))
-        total_precision += hits / k
-    metrics[f'precision@{k}'] = total_precision / total
-    
-    # Calculate Recall@k (treating <|endoftext|> as valid predictions)
-    total_recall = 0
-    for pred, target in zip(predictions, targets):
-        hits = len(set(pred[:k]) & set(target))
-        total_recall += hits / len(target)
-    metrics[f'recall@{k}'] = total_recall / total
-    
-    # Calculate NDCG@k (treating <|endoftext|> as valid predictions)
-    total_ndcg = 0
-    for pred, target in zip(predictions, targets):
-        dcg = 0
-        idcg = 1  # Since we're dealing with binary relevance
-        for i, item in enumerate(pred[:k]):
-            if item in target:
-                dcg += 1 / np.log2(i + 2)  # +2 because log2(1) = 0
-        total_ndcg += dcg / idcg
-    metrics[f'ndcg@{k}'] = total_ndcg / total
-    
-    # Calculate MRR (Mean Reciprocal Rank) - treating <|endoftext|> as valid predictions
-    total_mrr = 0
-    for pred, target in zip(predictions, targets):
-        for i, item in enumerate(pred):
-            if item in target:
-                total_mrr += 1 / (i + 1)
-                break
-    metrics['mrr'] = total_mrr / total
-    
-    # Calculate MAP (Mean Average Precision) - treating <|endoftext|> as valid predictions
-    total_map = 0
-    for pred, target in zip(predictions, targets):
-        ap = 0
-        hits = 0
-        for i, item in enumerate(pred):
-            if item in target:
-                hits += 1
-                ap += hits / (i + 1)
-        if hits > 0:
-            ap /= hits
-        total_map += ap
-    metrics['map'] = total_map / total
-    
-    # Calculate Coverage
-=======
     return ap / len(t_items) if len(t_items) > 0 else 0.0
 
 def stop_hit_at_k(pred: List[str], truth: List[str], k: int = 10) -> float:
@@ -282,10 +222,6 @@ def stop_ndcg_at_k(pred: List[str], truth: List[str], k: int = 10) -> float:
     return dcg / ideal if ideal > 0 else 0.0
 
 def coverage_items(predictions: List[List[str]], targets: List[List[str]], k: int = 10) -> float:
-<<<<<<< HEAD
-    """Calculate coverage for items only (excluding EOS)."""
->>>>>>> 404062a (improving evaluation metrics with two tracks)
-=======
     """
     Calculate coverage for items only (excluding EOS).
     
@@ -297,7 +233,6 @@ def coverage_items(predictions: List[List[str]], targets: List[List[str]], k: in
     Returns:
         Coverage@k for items only
     """
->>>>>>> 551c909 (fixing evluation and model performance)
     all_items = set()
     recommended_items = set()
     
@@ -416,13 +351,14 @@ def calculate_two_track_metrics(predictions: List[List[str]], targets: List[List
     
     return metrics
 
-def calculate_metrics(predictions: List[List[Union[str, int]]], targets: List[List[Union[str, int]]], k: int = 10) -> Dict[str, float]:
+def calculate_metrics_v2(predictions: List[List[str]], targets: List[List[str]], k: int = 10) -> Dict[str, float]:
     """
     Main function to calculate two-track metrics.
+    This replaces the old calculate_metrics function.
     
     Args:
-        predictions: List of predicted sequences
-        targets: List of target sequences
+        predictions: List of predicted sequences (strings)
+        targets: List of target sequences (strings)
         k: Number of items to consider
         
     Returns:
@@ -430,18 +366,66 @@ def calculate_metrics(predictions: List[List[Union[str, int]]], targets: List[Li
     """
     logger.info(f"Calculating two-track metrics for {len(predictions)} predictions with k={k}")
     
+    # Check for empty predictions and pad with EOS tokens
+    if not predictions:
+        logger.warning("No predictions provided, returning zero metrics")
+        return {
+            f'item_precision@{k}': 0.0,
+            f'item_recall@{k}': 0.0,
+            f'item_hitrate@{k}': 0.0,
+            f'item_ndcg@{k}': 0.0,
+            'item_mrr': 0.0,
+            'item_map': 0.0,
+            f'item_coverage@{k}': 0.0,
+            f'item_diversity@{k}': 0.0,
+            f'item_novelty@{k}': 0.0,
+            f'stop_hit@{k}': 0.0,
+            f'stop_ndcg@{k}': 0.0,
+            'stop_rank_median': None,
+            'stop_rank_mean': None,
+            'stop_rank_std': None,
+            'stop_prediction_rate': 0.0
+        }
+    
+    # Pad empty predictions with EOS tokens
+    padded_predictions = []
+    for pred in predictions:
+        if not pred:  # Empty prediction
+            padded_pred = [EOS] * k  # Pad with EOS tokens
+            logger.debug(f"Empty prediction padded with {k} EOS tokens")
+        else:
+            padded_pred = pred
+        padded_predictions.append(padded_pred)
+    
+    # Convert to string lists if needed
+    if isinstance(padded_predictions[0][0], int):
+        logger.warning("Converting integer predictions to strings - this may cause issues")
+        padded_predictions = [[str(item) for item in pred] for pred in padded_predictions]
+        targets = [[str(item) for item in target] for target in targets]
+    
+    return calculate_two_track_metrics(padded_predictions, targets, k)
+
+# Backward compatibility function
+def calculate_metrics(predictions: List[List[Union[str, int]]], targets: List[List[Union[str, int]]], k: int = 10) -> Dict[str, float]:
+    """
+    Backward compatibility wrapper for the old calculate_metrics function.
+    Now uses the two-track evaluation system.
+    
+    Args:
+        predictions: List of predicted item lists
+        targets: List of target item lists
+        k: Number of items to consider
+        
+    Returns:
+        Dictionary of metric values
+    """
     # Convert to string format
     str_predictions = [[str(item) for item in pred] for pred in predictions]
     str_targets = [[str(item) for item in target] for target in targets]
     
-    return calculate_two_track_metrics(str_predictions, str_targets, k)
+    return calculate_metrics_v2(str_predictions, str_targets, k)
 
 if __name__ == "__main__":
-    from src.utils.utils import setup_logging
-    
-    # Setup logging
-    setup_logging()
-    
     # Test the new metrics with example data
     test_predictions = [
         ["<|ASIN_B0081E9HRY|>", "<|ASIN_B07CP1KY9M|>", "<|ASIN_B07MWVCVR4|>", EOS, EOS, EOS, EOS, EOS, EOS, EOS],
@@ -453,24 +437,24 @@ if __name__ == "__main__":
         ["<|ASIN_B07FTFD1XB|>", "<|ASIN_B07CP1KY9M|>", EOS, EOS, EOS, EOS, EOS, EOS, EOS, EOS]
     ]
     
-    metrics = calculate_two_track_metrics(test_predictions, test_targets, k=10)
+    metrics = calculate_metrics_v2(test_predictions, test_targets, k=10)
     
-    logger.info("Two-Track Evaluation Results:")
-    logger.info("=" * 50)
-    logger.info("Track A: Item Recommendation Quality (exclude EOS)")
-    logger.info(f"  Item Precision@10: {metrics['item_precision@10']:.4f}")
-    logger.info(f"  Item Recall@10: {metrics['item_recall@10']:.4f}")
-    logger.info(f"  Item Hit Rate@10: {metrics['item_hitrate@10']:.4f}")
-    logger.info(f"  Item NDCG@10: {metrics['item_ndcg@10']:.4f}")
-    logger.info(f"  Item MRR: {metrics['item_mrr']:.4f}")
-    logger.info(f"  Item MAP: {metrics['item_map']:.4f}")
-    logger.info(f"  Item Coverage@10: {metrics['item_coverage@10']:.4f}")
-    logger.info(f"  Item Diversity@10: {metrics['item_diversity@10']:.4f}")
-    logger.info(f"  Item Novelty@10: {metrics['item_novelty@10']:.4f}")
+    print("Two-Track Evaluation Results:")
+    print("=" * 50)
+    print("Track A: Item Recommendation Quality (exclude EOS)")
+    print(f"  Item Precision@10: {metrics['item_precision@10']:.4f}")
+    print(f"  Item Recall@10: {metrics['item_recall@10']:.4f}")
+    print(f"  Item Hit Rate@10: {metrics['item_hitrate@10']:.4f}")
+    print(f"  Item NDCG@10: {metrics['item_ndcg@10']:.4f}")
+    print(f"  Item MRR: {metrics['item_mrr']:.4f}")
+    print(f"  Item MAP: {metrics['item_map']:.4f}")
+    print(f"  Item Coverage@10: {metrics['item_coverage@10']:.4f}")
+    print(f"  Item Diversity@10: {metrics['item_diversity@10']:.4f}")
+    print(f"  Item Novelty@10: {metrics['item_novelty@10']:.4f}")
     
-    logger.info("\nTrack B: Stopping Quality")
-    logger.info(f"  Stop Hit@10: {metrics['stop_hit@10']:.4f}")
-    logger.info(f"  Stop NDCG@10: {metrics['stop_ndcg@10']:.4f}")
-    logger.info(f"  Stop Rank (median): {metrics['stop_rank_median']}")
-    logger.info(f"  Stop Rank (mean): {metrics['stop_rank_mean']:.2f}")
-    logger.info(f"  Stop Prediction Rate: {metrics['stop_prediction_rate']:.4f}") 
+    print("\nTrack B: Stopping Quality")
+    print(f"  Stop Hit@10: {metrics['stop_hit@10']:.4f}")
+    print(f"  Stop NDCG@10: {metrics['stop_ndcg@10']:.4f}")
+    print(f"  Stop Rank (median): {metrics['stop_rank_median']}")
+    print(f"  Stop Rank (mean): {metrics['stop_rank_mean']:.2f}")
+    print(f"  Stop Prediction Rate: {metrics['stop_prediction_rate']:.4f}")

@@ -140,11 +140,12 @@ def get_next_items(
     df: pd.DataFrame,
     padding_strategy='repeat',
     pad_token="<|endoftext|>",
-    number_of_items_to_predict=5,
-    min_interactions=3
+    number_of_items_to_predict=10,
+    min_interactions=10
 ):
     """
     For each row in the dataframe, get the next N items the user interacted with.
+    Based on the successful LLMs-for-RecSys approach.
     
     Args:
         df (pd.DataFrame): Must have 'user_id', 'timestamp', 'parent_asin', 'title'
@@ -166,16 +167,17 @@ def get_next_items(
         if num_interactions < min_interactions:
             continue
 
-        for i in range(num_interactions):
-            # Get next items, but don't skip if there aren't enough
+        # Only process items where we have enough future interactions
+        for i in range(num_interactions - number_of_items_to_predict):
+            # Get next items starting from i+1
             next_df = user_data.loc[i + 1:i + number_of_items_to_predict, :]
             next_items = next_df['parent_asin'].tolist()
             next_item_names = next_df['title'].tolist()
 
-            # Handle padding if needed
+            # Ensure we have exactly number_of_items_to_predict items
             if len(next_items) < number_of_items_to_predict:
                 num_missing = number_of_items_to_predict - len(next_items)
-
+                
                 if padding_strategy == 'repeat':
                     if len(next_items) > 0:
                         next_items += [next_items[-1]] * num_missing
@@ -190,7 +192,7 @@ def get_next_items(
                     next_item_names += [pad_token] * num_missing
 
                 elif padding_strategy == 'none':
-                    # Skip rows where next_10_items do not exist
+                    # Skip rows where we don't have enough next items
                     continue
 
             next_items_data.append((
