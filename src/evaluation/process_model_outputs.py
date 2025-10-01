@@ -19,14 +19,34 @@ with open('data/processed/test_with_responses.json', 'r') as file:
 
 # Process each entry
 for entry in data:
-    # Split the model_response into items
-    model_response_items = entry['model_response'].split(', ')
+    # Get the model response
+    model_response = entry.get('model_response', '')
     
-    # Truncate to num_items (but DON'T pad with artificial EOS tokens)
-    # The model's actual predictions should be preserved as-is
-    model_response_items = model_response_items[:num_items]
+    # Handle empty/null responses
+    if not model_response or model_response.strip() == '':
+        # Pad with EOS tokens if response is empty
+        model_response_items = ['<|endoftext|>'] * num_items
+        logger.warning(f"Empty model response for entry, padded with {num_items} EOS tokens")
+    else:
+        # Split the model_response into items
+        model_response_items = model_response.split(', ')
+        
+        # Clean up items (remove empty strings)
+        model_response_items = [item.strip() for item in model_response_items if item.strip()]
+        
+        # If we have fewer items than required, pad with EOS tokens
+        if len(model_response_items) < num_items:
+            num_missing = num_items - len(model_response_items)
+            model_response_items.extend(['<|endoftext|>'] * num_missing)
+            logger.debug(f"Padded {num_missing} EOS tokens to reach {num_items} items")
+        
+        # Truncate if we have more items than required
+        model_response_items = model_response_items[:num_items]
     
-    # Join the items back into a string
+    # Store the items list for evaluation
+    entry['model_response_items'] = model_response_items
+    
+    # Also keep the joined string for compatibility
     entry['model_response'] = ', '.join(model_response_items)
 
 # Save the modified data to a new JSON file for evaluation

@@ -3,6 +3,7 @@ import logging
 from pathlib import Path
 import json
 import numpy as np
+import pandas as pd
 import tiktoken
 import os
 
@@ -244,7 +245,25 @@ def main():
     df_model_ready = merged_df.copy()
 
     # Create proper input format matching LLMs-for-RecSys approach
-    df_model_ready['input'] = df_model_ready['user_id'].apply(lambda x: f"<|user_{x}|>")
+    # Include item details in the input for better context
+    def create_input_text(row):
+        parts = [f"<|user_{row['user_id']}|>"]
+        
+        # Add item details
+        if pd.notna(row.get('parent_asin')):
+            parts.append(f"Item id is {row['parent_asin']}.")
+        if pd.notna(row.get('rating')):
+            parts.append(f"Rating of the item by user from 1 to 5 is {row['rating']}.")
+        if pd.notna(row.get('review_title')):
+            parts.append(f"Review title: {row['review_title']}.")
+        if pd.notna(row.get('title')):
+            parts.append(f"Item name is {row['title']}.")
+        if pd.notna(row.get('main_category')):
+            parts.append(f"Main category of the item is {row['main_category']}.")
+        
+        return " ".join(parts)
+    
+    df_model_ready['input'] = df_model_ready.apply(create_input_text, axis=1)
     
     # Rename columns to match expected format
     df_model_ready = df_model_ready.rename(columns={'next_items': "output", 'next_item_names': "output_names"})

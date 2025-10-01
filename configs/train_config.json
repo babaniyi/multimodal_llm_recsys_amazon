@@ -26,11 +26,11 @@
         "gradient_accumulation_steps": 2,
         "num_workers": 0,
         "pin_memory": true,
-        "number_of_items_to_predict": 10,
-        "min_interactions": 10,
-        "min_items_per_sequence": 10,
+        "number_of_items_to_predict": 5,
+        "min_interactions": 5,
+        "min_items_per_sequence": 5,
         "sequence_length": 12,
-        "user_prompt": "Given a user purchased an item with the following details, predict the next 10 items the user would purchase. ",
+        "user_prompt": "Given a user purchased an item with the following details, predict the next 5 items the user would purchase. ",
         "amazon_categories": [
             "Appliances",
             "Digital_Music",
@@ -55,9 +55,9 @@
         "sequence_aware_training": true
     },
     "training_config": {
-        "num_epochs": 10,
-        "learning_rate": 5e-6,
-        "min_learning_rate": 1e-6,
+        "num_epochs": 20,
+        "learning_rate": 1e-5,
+        "min_learning_rate": 5e-7,
         "stop_prediction_weight": 2.0,
         "item_prediction_weight": 1.0,
         "weight_decay": 0.01,
@@ -114,7 +114,7 @@
         "lora": true,
         "vision_model": "resnet-18",
         "use_improved_multimodal": true,
-        "multimodal_fusion": "cross_attention",
+        "multimodal_fusion": "concatenation",
         "image_text_alignment": true,
         "sequence_aware_training": true,
         "progressive_training": true

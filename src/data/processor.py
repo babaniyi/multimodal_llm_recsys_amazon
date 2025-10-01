@@ -260,8 +260,10 @@ def format_input_phi(entry):
 
 def split_data_temporal(df, train_ratio=0.7, val_ratio=0.15, test_ratio=0.15):
     """
-    Splits the data into train, validation, and test sets based on timestamps.
-    This ensures no future data leaks into training.
+    Splits the data into train, validation, and test sets PER USER based on temporal order.
+    This ensures proper item overlap between train and test while maintaining temporal ordering.
+    
+    Matches the approach from successful LLMs-for-RecSys project.
 
     Args:
     - df (pd.DataFrame): DataFrame containing user interactions with 'user_id' and 'date' columns.
@@ -279,24 +281,37 @@ def split_data_temporal(df, train_ratio=0.7, val_ratio=0.15, test_ratio=0.15):
     # Convert date strings to datetime objects
     df['date'] = pd.to_datetime(df['date'])
 
-    # Sort all data by date
-    df_sorted = df.sort_values('date').reset_index(drop=True)
+    # Split PER USER to ensure item overlap
+    train_list = []
+    val_list = []
+    test_list = []
     
-    # Find cutoff dates for splits
-    total_days = (df_sorted['date'].max() - df_sorted['date'].min()).days
-    train_end_date = df_sorted['date'].min() + pd.Timedelta(days=int(total_days * train_ratio))
-    val_end_date = train_end_date + pd.Timedelta(days=int(total_days * val_ratio))
-
-    # Split data based on dates
-    train_df = df_sorted[df_sorted['date'] < train_end_date].copy()
-    val_df = df_sorted[(df_sorted['date'] >= train_end_date) & 
-                       (df_sorted['date'] < val_end_date)].copy()
-    test_df = df_sorted[df_sorted['date'] >= val_end_date].copy()
+    for user_id, user_data in df.groupby('user_id'):
+        # Sort user's data by date
+        user_sorted = user_data.sort_values('date').reset_index(drop=True)
+        n = len(user_sorted)
+        
+        # Calculate split indices for this user
+        train_end_idx = int(n * train_ratio)
+        val_end_idx = int(n * (train_ratio + val_ratio))
+        
+        # Split this user's data
+        train_list.append(user_sorted.iloc[:train_end_idx])
+        val_list.append(user_sorted.iloc[train_end_idx:val_end_idx])
+        test_list.append(user_sorted.iloc[val_end_idx:])
+    
+    # Combine all users' splits
+    train_df = pd.concat(train_list, ignore_index=True) if train_list else pd.DataFrame()
+    val_df = pd.concat(val_list, ignore_index=True) if val_list else pd.DataFrame()
+    test_df = pd.concat(test_list, ignore_index=True) if test_list else pd.DataFrame()
 
     # Convert dates back to strings in YYYY-MM-DD format
-    train_df['date'] = train_df['date'].dt.strftime('%Y-%m-%d')
-    val_df['date'] = val_df['date'].dt.strftime('%Y-%m-%d')  
-    test_df['date'] = test_df['date'].dt.strftime('%Y-%m-%d')
+    if not train_df.empty:
+        train_df['date'] = train_df['date'].dt.strftime('%Y-%m-%d')
+    if not val_df.empty:
+        val_df['date'] = val_df['date'].dt.strftime('%Y-%m-%d')
+    if not test_df.empty:
+        test_df['date'] = test_df['date'].dt.strftime('%Y-%m-%d')
 
     # Reset indices
     train_df = train_df.reset_index(drop=True)
@@ -304,9 +319,9 @@ def split_data_temporal(df, train_ratio=0.7, val_ratio=0.15, test_ratio=0.15):
     test_df = test_df.reset_index(drop=True)
 
     # Log split statistics
-    logger.info(f"Train period: {df_sorted['date'].min().strftime('%Y-%m-%d')} to {train_end_date.strftime('%Y-%m-%d')}")
-    logger.info(f"Val period: {train_end_date.strftime('%Y-%m-%d')} to {val_end_date.strftime('%Y-%m-%d')}")
-    logger.info(f"Test period: {val_end_date.strftime('%Y-%m-%d')} to {df_sorted['date'].max().strftime('%Y-%m-%d')}")
+    logger.info(f"Train period: {train_df['date'].min()} to {train_df['date'].max()}")
+    logger.info(f"Val period: {val_df['date'].min()} to {val_df['date'].max()}")
+    logger.info(f"Test period: {test_df['date'].min()} to {test_df['date'].max()}")
 
     return train_df, val_df, test_df
 
