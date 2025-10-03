@@ -167,8 +167,10 @@ def get_next_items(
         if num_interactions < min_interactions:
             continue
 
-        # Only process items where we have enough future interactions
-        for i in range(num_interactions - number_of_items_to_predict):
+        # Process items where we have enough future interactions
+        # Allow users with exactly min_interactions to contribute at least one sample
+        max_start_idx = max(0, num_interactions - number_of_items_to_predict)
+        for i in range(max_start_idx + 1):
             # Get next items starting from i+1
             next_df = user_data.loc[i + 1:i + number_of_items_to_predict, :]
             next_items = next_df['parent_asin'].tolist()
