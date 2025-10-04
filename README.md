@@ -340,10 +340,10 @@ Our ablation studies demonstrate the value of multimodal integration:
 If you use this code in your research, please cite our paper:
 
 ```bibtex
-@article{multimodal_recsys_2024,
+@article{multimodal_recsys_2025,
   title={Enhancing Product Recommendation with Multimodal LLMs},
   author={Babaniyi Olaniyi},
-  journal={arXiv preprint},
+  journal={2025 IEEE International Conference on Data Mining Workshops (ICDMW)},
   year={2025}
 }
 ```
@@ -441,7 +441,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 For questions or issues, please:
 - Open an issue on GitHub
-- Contact the authors at [your-email@domain.com]
+- Contact the authors at [horlaneyee@gmail.com]
 
 ---
 
