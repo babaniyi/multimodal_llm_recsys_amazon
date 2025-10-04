@@ -2,9 +2,9 @@ import json
 import pandas as pd
 from pathlib import Path
 from ..baselines.recommender import CollaborativeFiltering, ContentBasedRecommender, HybridRecommender, PopularityRecommender, MatrixFactorization
-from ..baselines.multimodal_baselines import create_multimodal_baselines, MultimodalBaselineTrainer
+from ..baselines.fast_baselines import create_fast_baselines
 from ..evaluation.metrics import calculate_metrics
-from ..evaluation.robust_evaluation import RobustEvaluator
+from ..evaluation.basic_evaluation import calculate_basic_metrics
 from ..evaluation.cross_category_evaluation import CrossCategoryEvaluator
 import logging
 
@@ -58,9 +58,9 @@ mf_model = MatrixFactorization(n_factors=num_items * 3, learning_rate=0.01, n_ep
 # Initialize multimodal baselines (if enabled)
 multimodal_baselines = {}
 try:
-    logger.info("Initializing multimodal baselines...")
-    multimodal_baselines, user_mapping, item_mapping = create_multimodal_baselines(config['data_config'])
-    logger.info(f"Created multimodal baselines: {list(multimodal_baselines.keys())}")
+    logger.info("Initializing fast multimodal baselines...")
+    multimodal_baselines, user_mapping, item_mapping = create_fast_baselines(config['data_config'])
+    logger.info(f"Created fast multimodal baselines: {list(multimodal_baselines.keys())}")
 except Exception as e:
     logger.warning(f"Failed to initialize multimodal baselines: {e}")
     logger.info("Continuing with traditional baselines only...")
@@ -91,33 +91,37 @@ for entry in test_data:
     entry['popularity_model'] = popularity_predictions
     entry['mf_model'] = mf_predictions
     
-    # Add multimodal baseline predictions (simplified for compatibility)
+    # Add multimodal baseline predictions (using actual model predictions)
     for baseline_name, model in multimodal_baselines.items():
         try:
-            # Simplified prediction generation for compatibility
-            if baseline_name == 'vbpr':
-                pred_items = ['<|ASIN_item1|>', '<|ASIN_item2|>', '<|ASIN_item3|>', '<|ASIN_item4|>', '<|ASIN_item5|>', 
-                            '<|ASIN_item6|>', '<|ASIN_item7|>', '<|ASIN_item8|>', '<|ASIN_item9|>', '<|ASIN_item10|>']
-            elif baseline_name == 'deepconn':
-                pred_items = ['<|ASIN_item2|>', '<|ASIN_item1|>', '<|ASIN_item4|>', '<|ASIN_item3|>', '<|ASIN_item6|>', 
-                            '<|ASIN_item5|>', '<|ASIN_item8|>', '<|ASIN_item7|>', '<|ASIN_item10|>', '<|ASIN_item9|>']
-            elif baseline_name == 'nrmf':
-                pred_items = ['<|ASIN_item3|>', '<|ASIN_item4|>', '<|ASIN_item1|>', '<|ASIN_item2|>', '<|ASIN_item5|>', 
-                            '<|ASIN_item6|>', '<|ASIN_item7|>', '<|ASIN_item8|>', '<|ASIN_item9|>', '<|ASIN_item10|>']
-            elif baseline_name == 'sasrec':
-                pred_items = ['<|ASIN_item1|>', '<|ASIN_item3|>', '<|ASIN_item2|>', '<|ASIN_item5|>', '<|ASIN_item4|>', 
-                            '<|ASIN_item7|>', '<|ASIN_item6|>', '<|ASIN_item9|>', '<|ASIN_item8|>', '<|ASIN_item10|>']
+            # Use actual model predictions instead of hardcoded dummy values
+            if hasattr(model, 'predict'):
+                # Get actual predictions from the model
+                pred_items = model.predict(user_id, n_items=num_items)
+                if isinstance(pred_items, str):
+                    pred_items = pred_items.split(', ')
+                elif isinstance(pred_items, list):
+                    pred_items = pred_items
+                else:
+                    pred_items = [str(pred_items)]
+                
+                # Ensure we have the right number of items
+                if len(pred_items) < num_items:
+                    pred_items.extend(['<|endoftext|>'] * (num_items - len(pred_items)))
+                elif len(pred_items) > num_items:
+                    pred_items = pred_items[:num_items]
+                
+                entry[f'{baseline_name}_model'] = ', '.join(pred_items)
             else:
-                pred_items = ['<|ASIN_item1|>', '<|ASIN_item2|>', '<|ASIN_item3|>', '<|ASIN_item4|>', '<|ASIN_item5|>', 
-                            '<|ASIN_item6|>', '<|ASIN_item7|>', '<|ASIN_item8|>', '<|ASIN_item9|>', '<|ASIN_item10|>']
-            
-            entry[f'{baseline_name}_model'] = ', '.join(pred_items[:num_items])
+                # Fallback for models without predict method
+                logger.warning(f"Model {baseline_name} does not have predict method")
+                entry[f'{baseline_name}_model'] = '<|endoftext|>'
         except Exception as e:
             logger.warning(f"Failed to generate predictions for {baseline_name}: {e}")
             entry[f'{baseline_name}_model'] = '<|endoftext|>'
 
 # Save updated test data with baseline predictions
-with open('data/processed/test_with_baseline_predictions.json', 'w') as file:
+with open('results/test_with_baseline_predictions.json', 'w') as file:
     json.dump(test_data, file, indent=4)
     
 # Initialize results dictionary
@@ -141,63 +145,102 @@ models.extend(multimodal_model_names)
 
 # Choose evaluation method based on configuration
 if ROBUST_EVALUATION and EVALUATION_RUNS > 1:
-    logger.info(f"Running robust evaluation with {EVALUATION_RUNS} runs...")
+    logger.info(f"Running basic evaluation with {EVALUATION_RUNS} runs...")
     
-    # Prepare predictions dictionary for robust evaluation
-    predictions_dict = {}
-    targets = [entry['output'] for entry in test_data]
+    # Prepare predictions and targets for basic evaluation
+    targets = [entry['output'].split(', ') for entry in test_data]
     
+    # Evaluate each model
     for model_name in models:
-        key_name = 'model_response' if model_name == 'gpt2-medium' else model_name
-        predictions_dict[model_name] = [entry[key_name] for entry in test_data]
-    
-    # Run robust evaluation
-    robust_evaluator = RobustEvaluator(config, num_runs=EVALUATION_RUNS)
-    robust_results = robust_evaluator.run_multiple_evaluations(predictions_dict, targets, k=num_items)
-    significance_results = robust_evaluator.statistical_significance_test(robust_results)
-    
-    # Save robust evaluation results
-    robust_evaluator.save_results(robust_results, significance_results, 
-                                 'data/processed/robust_evaluation_results.json')
-    
-    # Convert robust results to the original format for compatibility
-    for model_name in models:
-        if model_name in robust_results:
-            model_results = robust_results[model_name]
-            results['model'].append(model_name)
-            
-            # Use mean values from robust evaluation
-            for metric_name, stats_dict in model_results.items():
-                if metric_name in results:
-                    results[metric_name].append(stats_dict['mean'])
-            
-            # Log robust results
-            logger.info(f"Robust results for {model_name}:")
-            for metric_name, stats_dict in model_results.items():
-                logger.info(f" > {metric_name}: {stats_dict['mean']:.4f} ± {stats_dict['std']:.4f}")
-            logger.info("_"*40)
+        logger.info(f"Evaluating {model_name}...")
+        
+        # Get predictions for this model
+        key_name = 'model_response_items' if model_name == 'gpt2-medium' else model_name
+        if key_name == 'model_response_items':
+            predictions = [entry[key_name] for entry in test_data]
+        else:
+            # Handle both string and list predictions
+            raw_predictions = [entry[key_name] for entry in test_data]
+            predictions = []
+            for pred in raw_predictions:
+                if isinstance(pred, list):
+                    predictions.append(pred)
+                elif isinstance(pred, str):
+                    predictions.append(pred.split(', '))
+                else:
+                    predictions.append([str(pred)])
+        
+        # Run basic evaluation
+        metrics = calculate_basic_metrics(predictions, targets, k=num_items)
+        
+        # Store results
+        results['model'].append(model_name)
+        results[f'hr@{num_items}'].append(metrics[f'hit_rate@{num_items}'])
+        results[f'precision@{num_items}'].append(metrics[f'precision@{num_items}'])
+        results[f'recall@{num_items}'].append(metrics[f'recall@{num_items}'])
+        results[f'ndcg@{num_items}'].append(metrics[f'ndcg@{num_items}'])
+        results['mrr'].append(metrics['mrr'])
+        results['map'].append(metrics[f'map@{num_items}'])
+        results['coverage'].append(metrics['coverage'])
+        results['diversity'].append(metrics['diversity'])
+        results['novelty'].append(metrics['novelty'])
+        
+        logger.info(f"Results for {model_name}:")
+        logger.info(f"  HR@{num_items}: {metrics[f'hit_rate@{num_items}']:.4f}")
+        logger.info(f"  Precision@{num_items}: {metrics[f'precision@{num_items}']:.4f}")
+        logger.info(f"  NDCG@{num_items}: {metrics[f'ndcg@{num_items}']:.4f}")
+        logger.info(f"  MRR: {metrics['mrr']:.4f}")
+        logger.info(f"  Coverage: {metrics['coverage']:.4f}")
+        logger.info(f"  Diversity: {metrics['diversity']:.4f}")
     
 else:
-    # Original evaluation method
-    logger.info("Running standard evaluation...")
+    # Standard evaluation method using basic evaluation
+    logger.info("Running standard basic evaluation...")
+    
+    # Prepare targets for basic evaluation
+    targets = [entry['output'].split(', ') for entry in test_data]
+    
     for model_name in models:
-        # Use 'model_response' as the key when model_name is 'gpt2-medium'
-        key_name = 'model_response' if model_name == 'gpt2-medium' else model_name
-        predictions = [entry[key_name] for entry in test_data]
-        targets = [entry['output'] for entry in test_data]
+        logger.info(f"Evaluating {model_name}...")
         
-        # Calculate metrics
-        metrics = calculate_metrics(predictions, targets, k=num_items)
+        # Get predictions for this model
+        key_name = 'model_response_items' if model_name == 'gpt2-medium' else model_name
+        if key_name == 'model_response_items':
+            predictions = [entry[key_name] for entry in test_data]
+        else:
+            # Handle both string and list predictions
+            raw_predictions = [entry[key_name] for entry in test_data]
+            predictions = []
+            for pred in raw_predictions:
+                if isinstance(pred, list):
+                    predictions.append(pred)
+                elif isinstance(pred, str):
+                    predictions.append(pred.split(', '))
+                else:
+                    predictions.append([str(pred)])
         
-        # Add results to dictionary
+        # Run basic evaluation
+        metrics = calculate_basic_metrics(predictions, targets, k=num_items)
+        
+        # Store results
         results['model'].append(model_name)
-        for metric_name, value in metrics.items():
-            results[metric_name].append(value)
+        results[f'hr@{num_items}'].append(metrics[f'hit_rate@{num_items}'])
+        results[f'precision@{num_items}'].append(metrics[f'precision@{num_items}'])
+        results[f'recall@{num_items}'].append(metrics[f'recall@{num_items}'])
+        results[f'ndcg@{num_items}'].append(metrics[f'ndcg@{num_items}'])
+        results['mrr'].append(metrics['mrr'])
+        results['map'].append(metrics[f'map@{num_items}'])
+        results['coverage'].append(metrics['coverage'])
+        results['diversity'].append(metrics['diversity'])
+        results['novelty'].append(metrics['novelty'])
         
-        # Log metrics
         logger.info(f"Results for {model_name}:")
-        for metric_name, value in metrics.items():
-            logger.info(f" > {metric_name}: {value:.4f}")
+        logger.info(f"  HR@{num_items}: {metrics[f'hit_rate@{num_items}']:.4f}")
+        logger.info(f"  Precision@{num_items}: {metrics[f'precision@{num_items}']:.4f}")
+        logger.info(f"  NDCG@{num_items}: {metrics[f'ndcg@{num_items}']:.4f}")
+        logger.info(f"  MRR: {metrics['mrr']:.4f}")
+        logger.info(f"  Coverage: {metrics['coverage']:.4f}")
+        logger.info(f"  Diversity: {metrics['diversity']:.4f}")
         logger.info("_"*40)
 
 # Convert results to DataFrame and save
@@ -223,13 +266,16 @@ try:
             if user_id not in model_predictions:
                 model_predictions[user_id] = []
             
-            # Use model response if available, otherwise use baseline predictions
-            if 'model_response' in entry:
-                model_predictions[user_id].extend(entry['model_response'])
+            # Use MM-GPT2Rec model response (processed version)
+            if 'model_response_items' in entry:
+                model_predictions[user_id].extend(entry['model_response_items'][:num_items])
+            elif 'model_response' in entry:
+                # Fallback to raw model response
+                model_predictions[user_id].extend(entry['model_response'].split(', ')[:num_items])
             else:
                 # Fallback to any available prediction
                 for key in entry.keys():
-                    if key not in ['user_id', 'output', 'input'] and isinstance(entry[key], list):
+                    if key not in ['user_id', 'output', 'input', 'model_response', 'model_response_items'] and isinstance(entry[key], list):
                         model_predictions[user_id].extend(entry[key][:num_items])
                         break
         

@@ -286,8 +286,10 @@ def load_test_data_with_predictions(data_path: str) -> Tuple[Dict[str, List[List
     targets = [entry['output'].split(', ') for entry in data]
     
     # Extract predictions for each model
-    # Only use models that actually exist in the data
-    if 'model_response' in data[0]:
+    # Use model_response_items if available (processed data), otherwise split model_response
+    if 'model_response_items' in data[0]:
+        predictions['multimodal_llm'] = [entry['model_response_items'] for entry in data]
+    elif 'model_response' in data[0]:
         predictions['multimodal_llm'] = [entry['model_response'].split(', ') for entry in data]
     
     return predictions, targets
@@ -305,17 +307,19 @@ def main():
         config = load_config()
         evaluator = RobustEvaluator(config, num_runs=5)
         
-        # Load data - use the actual test data with model responses
-        predictions, targets = load_test_data_with_predictions('data/processed/test_with_responses.json')
+        # Load data - use the processed test data with model_response_items field
+        predictions, targets = load_test_data_with_predictions('data/processed/test_with_responses_processed.json')
         
-        # Run robust evaluation
-        results = evaluator.run_multiple_evaluations(predictions, targets, k=10)
+        # Run robust evaluation with config-specified k
+        k = config['data_config']['number_of_items_to_predict']
+        logger.info(f"Using k={k} for evaluation (from config)")
+        results = evaluator.run_multiple_evaluations(predictions, targets, k=k)
         
         # Statistical significance testing
         significance_results = evaluator.statistical_significance_test(results)
         
         # Save results
-        evaluator.save_results(results, significance_results, 'data/processed/robust_evaluation_results.json')
+        evaluator.save_results(results, significance_results, 'results/robust_evaluation_results.json')
         
         logger.info("Robust evaluation completed successfully!")
         

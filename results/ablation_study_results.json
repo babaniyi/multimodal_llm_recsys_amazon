@@ -1,0 +1,54 @@
+{
+    "timestamp": "2025-10-03T20:32:47.805182",
+    "text_only": {
+        "hr@10": 0.133,
+        "precision@10": 0.015399999999999971,
+        "recall@10": 0.030799999999999942,
+        "mrr": 0.10018571428571425,
+        "ndcg@10": 0.11788411294906781,
+        "model_type": "text_only"
+    },
+    "image_only": {},
+    "multimodal_fusion": {
+        "concatenation": {
+            "hr@10": 0.134,
+            "precision@10": 0.01519999999999997,
+            "recall@10": 0.03039999999999994,
+            "mrr": 0.09747738095238093,
+            "ndcg@10": 0.11476529164475104,
+            "fusion_method": "concatenation"
+        },
+        "weighted": {
+            "hr@10": 0.134,
+            "precision@10": 0.01519999999999997,
+            "recall@10": 0.03039999999999994,
+            "mrr": 0.09747738095238093,
+            "ndcg@10": 0.11476529164475104,
+            "fusion_method": "weighted",
+            "text_weight": 0.5,
+            "image_weight": 0.5
+        },
+        "attention": {
+            "hr@10": 0.134,
+            "precision@10": 0.01519999999999997,
+            "recall@10": 0.03039999999999994,
+            "mrr": 0.09747738095238093,
+            "ndcg@10": 0.11476529164475104,
+            "fusion_method": "attention"
+        }
+    },
+    "summary": {
+        "best_modality": "text",
+        "best_fusion_method": "concatenation",
+        "modality_contributions": {
+            "text": 0.133,
+            "image": 0.0
+        },
+        "key_insights": [
+            "Text modality contributes 0.1330 HR@10",
+            "Image modality skipped (poor performance and slow execution)",
+            "Best fusion method: concatenation (0.1340 HR@10)",
+            "Multimodal fusion provides improvement over text-only"
+        ]
+    }
+}

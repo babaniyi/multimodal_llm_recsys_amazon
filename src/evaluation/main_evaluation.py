@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 def load_evaluation_results() -> Dict[str, Any]:
     """Load all evaluation results from different modules."""
-    results_dir = Path("data/processed")
+    results_dir = Path("results")
     results = {}
     
     # Load robust evaluation results
@@ -412,7 +412,7 @@ def main():
         main_metrics = extract_main_metrics(results)
         
         # Save main results
-        output_file = Path("data/processed/result_metrics.json")
+        output_file = Path("results/result_metrics.json")
         with open(output_file, 'w') as f:
             json.dump(main_metrics, f, indent=2)
         

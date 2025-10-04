@@ -14,19 +14,21 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 from .metrics import calculate_metrics
+from .basic_evaluation import calculate_basic_metrics
 
-def calculate_baseline_metrics(test_users: Dict[str, List[str]], predictions: Dict[str, List[str]]) -> Dict[str, float]:
+def calculate_baseline_metrics(test_users: Dict[str, List[str]], predictions: Dict[str, List[str]], k: int = 5) -> Dict[str, float]:
     """
-    Calculate metrics for baseline models with dictionary format.
+    Calculate metrics for baseline models with dictionary format using basic evaluation.
     
     Args:
         test_users: Dict mapping user_id to list of ground truth items
         predictions: Dict mapping user_id to list of predicted items
+        k: Number of items to evaluate
         
     Returns:
         Dictionary of metric values
     """
-    # Convert to list format for calculate_metrics
+    # Convert to list format for calculate_basic_metrics
     pred_lists = []
     target_lists = []
     
@@ -39,27 +41,17 @@ def calculate_baseline_metrics(test_users: Dict[str, List[str]], predictions: Di
             pred_lists.append([])
             target_lists.append(test_users[user_id])
     
-    # Convert string ASINs to integers for metrics calculation
-    # Create mapping from ASIN to integer
+    # Get all unique items for coverage, diversity, novelty
     all_items = set()
     for items in target_lists:
         all_items.update(items)
     for items in pred_lists:
         all_items.update(items)
     
-    item_to_int = {item: idx for idx, item in enumerate(all_items)}
+    # Remove EOS tokens from all_items
+    all_items = [item for item in all_items if item != "<|endoftext|>"]
     
-    # Convert to integer lists
-    pred_int_lists = []
-    target_int_lists = []
-    
-    for pred_list, target_list in zip(pred_lists, target_lists):
-        pred_int = [item_to_int[item] for item in pred_list if item in item_to_int]
-        target_int = [item_to_int[item] for item in target_list if item in item_to_int]
-        pred_int_lists.append(pred_int)
-        target_int_lists.append(target_int)
-    
-    return calculate_metrics(pred_int_lists, target_int_lists, k=10)
+    return calculate_basic_metrics(pred_lists, target_lists, k=k)
 from ..baselines.recommender import (
     CollaborativeFiltering,
     ContentBasedRecommender, 
@@ -78,7 +70,8 @@ class CrossCategoryEvaluator:
     def __init__(self, config: Dict[str, Any]):
         self.config = config
         # Use categories with sufficient data (more than 100 samples)
-        self.categories = ['Appliances', 'Amazon Home', 'Health & Personal Care', 'Tools & Home Improvement']
+        self.categories = ['Tools & Home Improvement', 'Appliances', 'Amazon Home', 'Industrial & Scientific']
+        self.k = config['data_config']['number_of_items_to_predict']  # Use config value instead of hardcoded 10
         self.results = {}
         
     def load_category_data(self, category: str) -> Tuple[List[Dict], List[Dict], List[Dict]]:
@@ -156,8 +149,8 @@ class CrossCategoryEvaluator:
                 test_users[user_id] = []
             test_users[user_id].append(item['parent_asin'])
         
-        # Calculate metrics
-        metrics = calculate_baseline_metrics(test_users, model_predictions)
+        # Calculate metrics using config k value
+        metrics = calculate_baseline_metrics(test_users, model_predictions, k=self.k)
         
         logger.info(f"Category {category} metrics: {metrics}")
         return metrics
@@ -203,7 +196,7 @@ class CrossCategoryEvaluator:
             for user_id in test_users.keys():
                 pred = cf_recommender.predict(user_id, n_items=10)
                 cf_predictions[user_id] = pred
-            baseline_results['Collaborative_Filtering'] = calculate_baseline_metrics(test_users, cf_predictions)
+            baseline_results['Collaborative_Filtering'] = calculate_baseline_metrics(test_users, cf_predictions, k=self.k)
         except Exception as e:
             logger.error(f"CF evaluation failed for {category}: {e}")
             baseline_results['Collaborative_Filtering'] = {}
@@ -215,7 +208,7 @@ class CrossCategoryEvaluator:
             cb_predictions = {}
             for user_id in test_users.keys():
                 cb_predictions[user_id] = cb_recommender.predict(user_id, n_items=10)
-            baseline_results['Content_Based'] = calculate_baseline_metrics(test_users, cb_predictions)
+            baseline_results['Content_Based'] = calculate_baseline_metrics(test_users, cb_predictions, k=self.k)
         except Exception as e:
             logger.error(f"CB evaluation failed for {category}: {e}")
             baseline_results['Content_Based'] = {}
@@ -229,7 +222,7 @@ class CrossCategoryEvaluator:
             pop_predictions = {}
             for user_id in test_users.keys():
                 pop_predictions[user_id] = popular_items
-            baseline_results['Popularity'] = calculate_baseline_metrics(test_users, pop_predictions)
+            baseline_results['Popularity'] = calculate_baseline_metrics(test_users, pop_predictions, k=self.k)
         except Exception as e:
             logger.error(f"Popularity evaluation failed for {category}: {e}")
             baseline_results['Popularity'] = {}
@@ -241,7 +234,7 @@ class CrossCategoryEvaluator:
             mf_predictions = {}
             for user_id in test_users.keys():
                 mf_predictions[user_id] = mf_recommender.predict(user_id, n_items=10)
-            baseline_results['Matrix_Factorization'] = calculate_baseline_metrics(test_users, mf_predictions)
+            baseline_results['Matrix_Factorization'] = calculate_baseline_metrics(test_users, mf_predictions, k=self.k)
         except Exception as e:
             logger.error(f"MF evaluation failed for {category}: {e}")
             baseline_results['Matrix_Factorization'] = {}
@@ -314,7 +307,7 @@ class CrossCategoryEvaluator:
             model_metrics = results['category_performance']
             
             # Find best/worst performing categories for each metric
-            for metric in ['HR@10', 'MRR', 'NDCG@10', 'Precision@10']:
+            for metric in [f'HR@{self.k}', 'MRR', f'NDCG@{self.k}', f'Precision@{self.k}']:
                 if all(metric in cat_metrics for cat_metrics in model_metrics.values()):
                     metric_values = {cat: metrics[metric] for cat, metrics in model_metrics.items()}
                     
@@ -348,7 +341,7 @@ class CrossCategoryEvaluator:
             for category, baselines in baseline_metrics.items():
                 if baselines:
                     best_baseline = {}
-                    for metric in ['HR@10', 'MRR', 'NDCG@10']:
+                    for metric in [f'HR@{self.k}', 'MRR', f'NDCG@{self.k}']:
                         metric_values = {name: metrics.get(metric, 0) for name, metrics in baselines.items()}
                         if metric_values:
                             best_baseline[metric] = max(metric_values, key=metric_values.get)
@@ -392,7 +385,7 @@ class CrossCategoryEvaluator:
     
     def _plot_category_comparison(self, category_performance: Dict[str, Dict[str, float]], output_path: Path):
         """Plot category performance comparison."""
-        metrics = ['HR@10', 'MRR', 'NDCG@10', 'Precision@10']
+        metrics = [f'HR@{self.k}', 'MRR', f'NDCG@{self.k}', f'Precision@{self.k}']
         
         fig, axes = plt.subplots(2, 2, figsize=(15, 12))
         axes = axes.flatten()
@@ -417,7 +410,7 @@ class CrossCategoryEvaluator:
     
     def _plot_baseline_comparison(self, baseline_performance: Dict[str, Dict[str, Dict[str, float]]], output_path: Path):
         """Plot baseline performance across categories."""
-        metrics = ['HR@10', 'MRR', 'NDCG@10']
+        metrics = [f'HR@{self.k}', 'MRR', f'NDCG@{self.k}']
         
         fig, axes = plt.subplots(1, 3, figsize=(18, 6))
         
@@ -472,7 +465,7 @@ class CrossCategoryEvaluator:
         plt.savefig(output_path / 'performance_variance.png', dpi=300, bbox_inches='tight')
         plt.close()
     
-    def save_results(self, results: Dict[str, Any], output_dir: str = "data/processed"):
+    def save_results(self, results: Dict[str, Any], output_dir: str = "results"):
         """
         Save cross-category evaluation results.
         
@@ -565,7 +558,7 @@ def main():
         
         logger.info("Cross-category evaluation completed!")
         logger.info(f"Categories evaluated: {list(results['category_performance'].keys())}")
-        logger.info(f"Results saved to: data/processed/cross_category_evaluation_results.json")
+        logger.info(f"Results saved to: results/cross_category_evaluation_results.json")
         
     except Exception as e:
         logger.error(f"Cross-category evaluation failed: {e}")

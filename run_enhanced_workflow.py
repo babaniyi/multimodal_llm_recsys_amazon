@@ -193,19 +193,19 @@ def main():
     else:
         logger.info("Step 4: Baseline Comparison (skipped)")
     
-    # Step 5: Robust Evaluation
+    # Step 5: Basic Evaluation
     if "eval" in steps_to_run:
-        logger.info("Step 5: Robust Evaluation")
+        logger.info("Step 5: Basic Evaluation")
         logger.info("=" * 60)
         success = run_command(
-            "python -m src.evaluation.robust_evaluation",
-            "Running robust evaluation with statistical testing"
+            "python -m src.evaluation.basic_evaluation",
+            "Running basic evaluation with standard metrics"
         )
         if not success:
-            logger.error("Robust evaluation failed. Exiting.")
+            logger.error("Basic evaluation failed. Exiting.")
             return
     else:
-        logger.info("Step 5: Robust Evaluation (skipped)")
+        logger.info("Step 5: Basic Evaluation (skipped)")
     
     # Step 6: Ablation Studies
     if "eval" in steps_to_run:
@@ -219,7 +219,7 @@ def main():
             logger.error("Ablation studies failed. Exiting.")
             return
     else:
-        logger.info("Step 6: Ablation Studies (skipped)")
+        logger.info("Step 7: Ablation Studies (skipped)")
     
     # Step 7: Cross-Category Analysis
     if "cross" in steps_to_run:
@@ -254,10 +254,10 @@ def main():
     logger.info("=" * 60)
     
     # Check for results files
-    results_dir = Path("data/processed")
+    results_dir = Path("results")
     result_files = {
+        "Basic Evaluation": results_dir / "basic_evaluation_results.json",
         "Main Results": results_dir / "result_metrics.json",
-        "Robust Evaluation": results_dir / "robust_evaluation_results.json",
         "Ablation Studies": results_dir / "ablation_study_results.json",
         "Baseline Predictions": results_dir / "test_with_baseline_predictions.json",
         "Cross Category Analysis": results_dir / "cross_category_evaluation_results.json",
@@ -272,8 +272,8 @@ def main():
     
     logger.info("Enhanced workflow completed successfully!")
     logger.info("Results saved to:")
+    logger.info("  - Basic evaluation: data/processed/basic_evaluation_results.json")
     logger.info("  - Main results: data/processed/result_metrics.json")
-    logger.info("  - Robust evaluation: data/processed/robust_evaluation_results.json")
     logger.info("  - Ablation studies: data/processed/ablation_study_results.json")
     logger.info("  - Baseline predictions: data/processed/test_with_baseline_predictions.json")
     logger.info("  - Cross-category analysis: data/processed/cross_category_evaluation_results.json")

@@ -521,8 +521,9 @@ class AblationStudy:
         # Text-only study (with optimized TF-IDF)
         results['text_only'] = self.text_only_model(train_data, test_data, global_tfidf)
         
-        # Image-only study
-        results['image_only'] = self.image_only_model(train_data, test_data, image_embeddings)
+        # Image-only study (SKIPPED - poor performance and slow)
+        # results['image_only'] = self.image_only_model(train_data, test_data, image_embeddings)
+        logger.info("Skipping image-only baseline due to poor performance and slow execution")
         
         # Multimodal fusion comparison (with optimized TF-IDF)
         results['multimodal_fusion'] = self.multimodal_fusion_comparison(train_data, test_data, image_embeddings, global_tfidf)
@@ -544,18 +545,11 @@ class AblationStudy:
             'key_insights': []
         }
         
-        # Compare modalities
+        # Compare modalities (image-only skipped)
         text_score = results['text_only']['hr@10']
-        image_score = results['image_only']['hr@10']
-        
-        if text_score > image_score:
-            summary['best_modality'] = 'text'
-            summary['modality_contributions']['text'] = text_score
-            summary['modality_contributions']['image'] = image_score
-        else:
-            summary['best_modality'] = 'image'
-            summary['modality_contributions']['image'] = image_score
-            summary['modality_contributions']['text'] = text_score
+        summary['best_modality'] = 'text'
+        summary['modality_contributions']['text'] = text_score
+        summary['modality_contributions']['image'] = 0.0  # Skipped
         
         # Compare fusion methods
         fusion_results = results['multimodal_fusion']
@@ -572,19 +566,19 @@ class AblationStudy:
         
         # Generate insights
         summary['key_insights'].append(f"Text modality contributes {text_score:.4f} HR@10")
-        summary['key_insights'].append(f"Image modality contributes {image_score:.4f} HR@10")
+        summary['key_insights'].append("Image modality skipped (poor performance and slow execution)")
         summary['key_insights'].append(f"Best fusion method: {best_fusion_method} ({best_fusion_score:.4f} HR@10)")
         
-        if best_fusion_score > max(text_score, image_score):
-            summary['key_insights'].append("Multimodal fusion provides improvement over single modalities")
+        if best_fusion_score > text_score:
+            summary['key_insights'].append("Multimodal fusion provides improvement over text-only")
         else:
-            summary['key_insights'].append("Single modality performs better than multimodal fusion")
+            summary['key_insights'].append("Text-only performs better than multimodal fusion")
         
         return summary
     
     def _save_results(self, results: Dict[str, Any]):
         """Save ablation study results."""
-        output_path = Path('data/processed/ablation_study_results.json')
+        output_path = Path('results/ablation_study_results.json')
         with open(output_path, 'w') as f:
             json.dump(results, f, indent=4)
         

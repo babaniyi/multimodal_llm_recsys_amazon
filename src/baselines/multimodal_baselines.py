@@ -47,6 +47,13 @@ class VBPR(nn.Module):
         
         # Initialize embeddings
         self._init_weights()
+        
+        # Add user and item mappings for compatibility with predict method
+        self.user_mapping = {}
+        self.item_mapping = {}
+        self.reverse_user_mapping = {}
+        self.reverse_item_mapping = {}
+        self.visual_features = {}
     
     def _init_weights(self):
         """Initialize model weights."""
@@ -89,21 +96,51 @@ class VBPR(nn.Module):
         
         return scores
     
-    def predict(self, user_id: int, item_ids: List[int], visual_features: Dict[int, np.ndarray]) -> List[float]:
-        """Predict scores for a user and list of items."""
+    def predict(self, user_id: int, n_items: int = 10) -> str:
+        """
+        Predict top-n items for a user (compatible with baseline evaluation).
+        
+        Args:
+            user_id: User ID
+            n_items: Number of items to recommend
+            
+        Returns:
+            Comma-separated string of recommended item IDs
+        """
+        if user_id not in self.user_mapping:
+            return '<|endoftext|>'
+        
+        user_idx = self.user_mapping[user_id]
+        
+        # Get all item scores for this user
+        all_items = list(self.item_mapping.keys())
+        item_scores = []
+        
+        for item_id in all_items:
+            item_idx = self.item_mapping[item_id]
+            score = self.predict_score(user_idx, item_idx)
+            item_scores.append((item_id, score))
+        
+        # Sort by score and get top-n
+        item_scores.sort(key=lambda x: x[1], reverse=True)
+        top_items = [item_id for item_id, _ in item_scores[:n_items]]
+        
+        return ', '.join(top_items)
+    
+    def predict_score(self, user_idx: int, item_idx: int) -> float:
+        """Predict score for a specific user-item pair."""
         self.eval()
         with torch.no_grad():
-            user_tensor = torch.tensor([user_id] * len(item_ids))
-            item_tensor = torch.tensor(item_ids)
+            user_tensor = torch.tensor([user_idx], dtype=torch.long, device=self.device)
+            item_tensor = torch.tensor([item_idx], dtype=torch.long, device=self.device)
             
-            # Get visual features for items
-            visual_tensor = torch.stack([
-                torch.tensor(visual_features.get(item_id, np.zeros(self.image_dim)))
-                for item_id in item_ids
-            ])
+            # Get visual features for item
+            item_id = self.reverse_item_mapping[item_idx]
+            visual_features = self.visual_features.get(item_id, np.zeros(self.image_dim))
+            visual_tensor = torch.tensor(visual_features, dtype=torch.float32, device=self.device).unsqueeze(0)
             
-            scores = self.forward(user_tensor, item_tensor, visual_tensor)
-            return scores.tolist()
+            score = self.forward(user_tensor, item_tensor, visual_tensor)
+            return score.item()
 
 
 class DeepCoNN(nn.Module):
@@ -119,6 +156,7 @@ class DeepCoNN(nn.Module):
         self.embedding_dim = embedding_dim
         self.hidden_dim = hidden_dim
         self.n_factors = n_factors
+        self.text_dim = embedding_dim  # Add text_dim for compatibility
         
         # Text embeddings
         self.text_embedding = nn.Embedding(vocab_size, embedding_dim)
@@ -138,6 +176,13 @@ class DeepCoNN(nn.Module):
         self.dropout = nn.Dropout(0.5)
         
         self._init_weights()
+        
+        # Add user and item mappings for compatibility with predict method
+        self.user_mapping = {}
+        self.item_mapping = {}
+        self.reverse_user_mapping = {}
+        self.reverse_item_mapping = {}
+        self.text_features = {}
     
     def _init_weights(self):
         """Initialize model weights."""
@@ -184,6 +229,50 @@ class DeepCoNN(nn.Module):
         scores = self.fc2(hidden).squeeze()
         
         return scores
+    
+    def predict(self, user_id: int, n_items: int = 10) -> str:
+        """
+        Predict top-n items for a user (compatible with baseline evaluation).
+        
+        Args:
+            user_id: User ID
+            n_items: Number of items to recommend
+            
+        Returns:
+            Comma-separated string of recommended item IDs
+        """
+        if user_id not in self.user_mapping:
+            return '<|endoftext|>'
+        
+        user_idx = self.user_mapping[user_id]
+        
+        # Get all item scores for this user
+        all_items = list(self.item_mapping.keys())
+        item_scores = []
+        
+        for item_id in all_items:
+            item_idx = self.item_mapping[item_id]
+            score = self.predict_score(user_idx, item_idx)
+            item_scores.append((item_id, score))
+        
+        # Sort by score and get top-n
+        item_scores.sort(key=lambda x: x[1], reverse=True)
+        top_items = [item_id for item_id, _ in item_scores[:n_items]]
+        
+        return ', '.join(top_items)
+    
+    def predict_score(self, user_idx: int, item_idx: int) -> float:
+        """Predict score for a specific user-item pair."""
+        self.eval()
+        with torch.no_grad():
+            # For DeepCoNN, we need to create dummy text sequences
+            # Since we don't have actual text data, we'll use zeros
+            seq_len = 10  # Default sequence length
+            user_text = torch.zeros(1, seq_len, dtype=torch.long, device=self.device)
+            item_text = torch.zeros(1, seq_len, dtype=torch.long, device=self.device)
+            
+            score = self.forward(user_text, item_text)
+            return score.item()
 
 
 class NRMF(nn.Module):
@@ -197,6 +286,8 @@ class NRMF(nn.Module):
         self.n_users = n_users
         self.n_items = n_items
         self.n_factors = n_factors
+        self.text_dim = text_dim  # Add text_dim for compatibility
+        self.image_dim = image_dim  # Add image_dim for compatibility
         
         # User and item embeddings
         self.user_embeddings = nn.Embedding(n_users, n_factors)
@@ -218,6 +309,14 @@ class NRMF(nn.Module):
         self.global_bias = nn.Parameter(torch.zeros(1))
         
         self._init_weights()
+        
+        # Add user and item mappings for compatibility with predict method
+        self.user_mapping = {}
+        self.item_mapping = {}
+        self.reverse_user_mapping = {}
+        self.reverse_item_mapping = {}
+        self.text_features = {}
+        self.image_features = {}
     
     def _init_weights(self):
         """Initialize model weights."""
@@ -265,6 +364,55 @@ class NRMF(nn.Module):
         scores = scores + user_bias + item_bias + self.global_bias
         
         return scores
+    
+    def predict(self, user_id: int, n_items: int = 10) -> str:
+        """
+        Predict top-n items for a user (compatible with baseline evaluation).
+        
+        Args:
+            user_id: User ID
+            n_items: Number of items to recommend
+            
+        Returns:
+            Comma-separated string of recommended item IDs
+        """
+        if user_id not in self.user_mapping:
+            return '<|endoftext|>'
+        
+        user_idx = self.user_mapping[user_id]
+        
+        # Get all item scores for this user
+        all_items = list(self.item_mapping.keys())
+        item_scores = []
+        
+        for item_id in all_items:
+            item_idx = self.item_mapping[item_id]
+            score = self.predict_score(user_idx, item_idx)
+            item_scores.append((item_id, score))
+        
+        # Sort by score and get top-n
+        item_scores.sort(key=lambda x: x[1], reverse=True)
+        top_items = [item_id for item_id, _ in item_scores[:n_items]]
+        
+        return ', '.join(top_items)
+    
+    def predict_score(self, user_idx: int, item_idx: int) -> float:
+        """Predict score for a specific user-item pair."""
+        self.eval()
+        with torch.no_grad():
+            user_tensor = torch.tensor([user_idx], dtype=torch.long, device=self.device)
+            item_tensor = torch.tensor([item_idx], dtype=torch.long, device=self.device)
+            
+            # Get multimodal features for item
+            item_id = self.reverse_item_mapping[item_idx]
+            text_features = self.text_features.get(item_id, np.zeros(self.text_dim))
+            image_features = self.image_features.get(item_id, np.zeros(self.image_dim))
+            
+            text_tensor = torch.tensor(text_features, dtype=torch.float32, device=self.device).unsqueeze(0)
+            image_tensor = torch.tensor(image_features, dtype=torch.float32, device=self.device).unsqueeze(0)
+            
+            score = self.forward(user_tensor, item_tensor, text_tensor, image_tensor)
+            return score.item()
 
 
 class SASRec(nn.Module):
@@ -300,6 +448,14 @@ class SASRec(nn.Module):
         self.dropout = nn.Dropout(dropout_rate)
         
         self._init_weights()
+        
+        # Add user and item mappings for compatibility with predict method
+        self.user_mapping = {}
+        self.item_mapping = {}
+        self.reverse_user_mapping = {}
+        self.reverse_item_mapping = {}
+        self.user_histories = {}
+        self.max_seq_len = max_len
     
     def _init_weights(self):
         """Initialize model weights."""
@@ -336,6 +492,52 @@ class SASRec(nn.Module):
         x = self.layer_norm(x)
         
         return x
+    
+    def predict(self, user_id: int, n_items: int = 10) -> str:
+        """
+        Predict top-n items for a user (compatible with baseline evaluation).
+        
+        Args:
+            user_id: User ID
+            n_items: Number of items to recommend
+            
+        Returns:
+            Comma-separated string of recommended item IDs
+        """
+        if user_id not in self.user_mapping:
+            return '<|endoftext|>'
+        
+        # For SASRec, we need user's interaction history
+        user_history = self.user_histories.get(user_id, [])
+        if not user_history:
+            return '<|endoftext|>'
+        
+        # Convert history to tensor
+        history_tensor = torch.tensor([self.item_mapping[item] for item in user_history[-self.max_seq_len:]])
+        history_tensor = history_tensor.unsqueeze(0)  # Add batch dimension
+        
+        # Create attention mask
+        attention_mask = torch.ones_like(history_tensor)
+        
+        # Get user representation
+        user_repr = self.forward(history_tensor, attention_mask)
+        user_repr = user_repr[:, -1, :]  # Get last item representation
+        
+        # Score all items
+        all_items = list(self.item_mapping.keys())
+        item_scores = []
+        
+        for item_id in all_items:
+            item_idx = self.item_mapping[item_id]
+            item_emb = self.item_embeddings(torch.tensor([item_idx]))
+            score = torch.cosine_similarity(user_repr, item_emb, dim=1).item()
+            item_scores.append((item_id, score))
+        
+        # Sort by score and get top-n
+        item_scores.sort(key=lambda x: x[1], reverse=True)
+        top_items = [item_id for item_id, _ in item_scores[:n_items]]
+        
+        return ', '.join(top_items)
 
 
 class TransformerBlock(nn.Module):
@@ -414,6 +616,10 @@ def create_multimodal_baselines(data_config: Dict[str, Any]) -> Dict[str, nn.Mod
     """
     baselines = {}
     
+    # Determine device
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    print(f"Using device: {device}")
+    
     # Load dataset info
     with open(data_config['train_file'], 'r') as f:
         train_data = json.load(f)
@@ -430,10 +636,18 @@ def create_multimodal_baselines(data_config: Dict[str, Any]) -> Dict[str, nn.Mod
     item_mapping = {item: idx for idx, item in enumerate(items)}
     
     # Create baselines
-    baselines['vbpr'] = VBPR(n_users, n_items, n_factors=50)
-    baselines['deepconn'] = DeepCoNN(vocab_size=10000, embedding_dim=128)
-    baselines['nrmf'] = NRMF(n_users, n_items, n_factors=50)
-    baselines['sasrec'] = SASRec(n_items, hidden_size=50)
+    baselines['nrmf'] = NRMF(n_users, n_items, n_factors=50).to(device)
+    baselines['vbpr'] = VBPR(n_users, n_items, n_factors=50).to(device)
+    baselines['deepconn'] = DeepCoNN(vocab_size=10000, embedding_dim=128).to(device)
+    baselines['sasrec'] = SASRec(n_items, hidden_size=50).to(device)
+    
+    # Set mappings for all models
+    for model_name, model in baselines.items():
+        model.user_mapping = user_mapping
+        model.item_mapping = item_mapping
+        model.reverse_user_mapping = {idx: user for user, idx in user_mapping.items()}
+        model.reverse_item_mapping = {idx: item for item, idx in item_mapping.items()}
+        model.device = device  # Store device for use in predict methods
     
     return baselines, user_mapping, item_mapping
 

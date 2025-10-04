@@ -1,0 +1,177 @@
+{
+  "category_performance": {},
+  "baseline_performance": {
+    "Tools & Home Improvement": {
+      "Collaborative_Filtering": {
+        "precision@5": 0.0,
+        "recall@5": 0.0,
+        "hit_rate@5": 0.0,
+        "ndcg@5": 0.0,
+        "mrr": 0.0,
+        "map@5": 0.0,
+        "coverage": 0.013295346628679962,
+        "diversity": 0.7796632587923302,
+        "novelty": 0.0
+      },
+      "Content_Based": {
+        "precision@5": 0.0,
+        "recall@5": 0.0,
+        "hit_rate@5": 0.0,
+        "ndcg@5": 0.0,
+        "mrr": 0.0,
+        "map@5": 0.0,
+        "coverage": 0.0,
+        "diversity": 0.0,
+        "novelty": 0.0
+      },
+      "Popularity": {
+        "precision@5": 0.0,
+        "recall@5": 0.0,
+        "hit_rate@5": 0.0,
+        "ndcg@5": 0.0,
+        "mrr": 0.0,
+        "map@5": 0.0,
+        "coverage": 0.012662234884457106,
+        "diversity": 0.0,
+        "novelty": 0.0
+      },
+      "Matrix_Factorization": {
+        "precision@5": 0.0,
+        "recall@5": 0.0,
+        "hit_rate@5": 0.0,
+        "ndcg@5": 0.0,
+        "mrr": 0.0,
+        "map@5": 0.0,
+        "coverage": 0.013295346628679962,
+        "diversity": 0.7781781441389521,
+        "novelty": 0.0
+      }
+    },
+    "Appliances": {},
+    "Amazon Home": {
+      "Collaborative_Filtering": {
+        "precision@5": 0.0,
+        "recall@5": 0.0,
+        "hit_rate@5": 0.0,
+        "ndcg@5": 0.0,
+        "mrr": 0.0,
+        "map@5": 0.0,
+        "coverage": 0.042988741044012284,
+        "diversity": 0.8484159732100033,
+        "novelty": 0.0
+      },
+      "Content_Based": {
+        "precision@5": 0.0,
+        "recall@5": 0.0,
+        "hit_rate@5": 0.0,
+        "ndcg@5": 0.0,
+        "mrr": 0.0,
+        "map@5": 0.0,
+        "coverage": 0.0,
+        "diversity": 0.0,
+        "novelty": 0.0
+      },
+      "Popularity": {
+        "precision@5": 0.0,
+        "recall@5": 0.0,
+        "hit_rate@5": 0.0,
+        "ndcg@5": 0.0,
+        "mrr": 0.0,
+        "map@5": 0.0,
+        "coverage": 0.038894575230296824,
+        "diversity": 0.0,
+        "novelty": 0.0
+      },
+      "Matrix_Factorization": {
+        "precision@5": 0.0,
+        "recall@5": 0.0,
+        "hit_rate@5": 0.0,
+        "ndcg@5": 0.0,
+        "mrr": 0.0,
+        "map@5": 0.0,
+        "coverage": 0.042988741044012284,
+        "diversity": 0.8466298693757538,
+        "novelty": 0.0
+      }
+    },
+    "Industrial & Scientific": {
+      "Collaborative_Filtering": {
+        "precision@5": 0.0,
+        "recall@5": 0.0,
+        "hit_rate@5": 0.0,
+        "ndcg@5": 0.0,
+        "mrr": 0.0,
+        "map@5": 0.0,
+        "coverage": 0.1337579617834395,
+        "diversity": 0.8957189778904411,
+        "novelty": 0.0
+      },
+      "Content_Based": {
+        "precision@5": 0.0,
+        "recall@5": 0.0,
+        "hit_rate@5": 0.0,
+        "ndcg@5": 0.0,
+        "mrr": 0.0,
+        "map@5": 0.0,
+        "coverage": 0.0,
+        "diversity": 0.0,
+        "novelty": 0.0
+      },
+      "Popularity": {
+        "precision@5": 0.0,
+        "recall@5": 0.0,
+        "hit_rate@5": 0.0,
+        "ndcg@5": 0.0,
+        "mrr": 0.0,
+        "map@5": 0.0,
+        "coverage": 0.1178343949044586,
+        "diversity": 0.0,
+        "novelty": 0.0
+      },
+      "Matrix_Factorization": {
+        "precision@5": 0.0,
+        "recall@5": 0.0,
+        "hit_rate@5": 0.0,
+        "ndcg@5": 0.0,
+        "mrr": 0.0,
+        "map@5": 0.0,
+        "coverage": 0.1337579617834395,
+        "diversity": 0.8916495749291135,
+        "novelty": 0.0
+      }
+    }
+  },
+  "comparison_analysis": {
+    "best_performing_category": {},
+    "worst_performing_category": {},
+    "category_rankings": {},
+    "performance_variance": {},
+    "category_insights": {
+      "Tools & Home Improvement": {
+        "best_baseline": {
+          "HR@5": "Collaborative_Filtering",
+          "MRR": "Collaborative_Filtering",
+          "NDCG@5": "Collaborative_Filtering"
+        },
+        "num_baselines_tested": 4
+      },
+      "Amazon Home": {
+        "best_baseline": {
+          "HR@5": "Collaborative_Filtering",
+          "MRR": "Collaborative_Filtering",
+          "NDCG@5": "Collaborative_Filtering"
+        },
+        "num_baselines_tested": 4
+      },
+      "Industrial & Scientific": {
+        "best_baseline": {
+          "HR@5": "Collaborative_Filtering",
+          "MRR": "Collaborative_Filtering",
+          "NDCG@5": "Collaborative_Filtering"
+        },
+        "num_baselines_tested": 4
+      }
+    }
+  },
+  "statistical_tests": {}
+}
