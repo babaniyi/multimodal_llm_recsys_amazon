@@ -1,0 +1,285 @@
+{
+  "total_examples_analyzed": 10555,
+  "examples_with_predictions": 7,
+  "examples": [
+    {
+      "user_id": "AE222KSFP7UXSULU6I34OU2A2DUQ",
+      "current_item": "Range Kleen 8121 Electric Range and Oven Replacement Knob Kit, Chrome",
+      "ground_truth_asins": [
+        "<|ASIN_B073MZ9RHC|>",
+        "<|ASIN_B096W7GTGY|>",
+        "<|ASIN_B096W7GTGY|>",
+        "<|ASIN_B096T96G3J|>",
+        "<|endoftext|>"
+      ],
+      "ground_truth_names": [
+        "Lifetime Appliance 3362624 Timer Knob Compatible with Whirlpool Washer",
+        "WaterSentinel WSG-1 Made in USA Refrigerator Replacement Filter: Fits GE MWF Filters\u2026",
+        "WaterSentinel WSG-1 Made in USA Refrigerator Replacement Filter: Fits GE MWF Filters\u2026",
+        "WaterSentinel WSG-1 Refrigerator Replacement Filter: Fits GE, Hot Point & Kenmore Filters (3-Pack), White/Blue",
+        "<",
+        "endoftext",
+        ">"
+      ],
+      "predicted_asins": [
+        "<|ASIN_B00LKZ7OQ1|>",
+        "<|ASIN_B00LKZ7OQ1|>",
+        "<|ASIN_B07SV4VCKV|>",
+        "<|ASIN_B00LKZ7OQ1|>",
+        "<|endoftext|>"
+      ],
+      "predicted_names": [
+        "Unknown (<|ASIN_B00LKZ7OQ1|>)",
+        "Unknown (<|ASIN_B00LKZ7OQ1|>)",
+        "Snap Supply Dryer Igniter Replaces WE4X739",
+        "Unknown (<|ASIN_B00LKZ7OQ1|>)",
+        "Unknown (<|endoftext|>)"
+      ],
+      "overlap_count": 1,
+      "overlap_items": [
+        "<|endoftext|>"
+      ],
+      "hit_rate": 1.0
+    },
+    {
+      "user_id": "AE22E3XNIF5TITEAJXHT55LD5QUQ",
+      "current_item": "Mist LT800P LG Refrigerator Water Filter, Compatible with LG Water Filter ADQ736134, LG ADQ736134 Water Filter, Kenmore 9490, 46-9490, 469490, ADQ73613402, LG LMXS30776S, LG LSXS26366S, 3 Pack",
+      "ground_truth_asins": [
+        "<|ASIN_B01LZHJF55|>",
+        "<|ASIN_B01LZHJF55|>",
+        "<|ASIN_B07DDGWWVC|>",
+        "<|ASIN_B07DDGWWVC|>",
+        "<|endoftext|>"
+      ],
+      "ground_truth_names": [
+        "Tier1 ADQ36006101 Refrigerator Water & Air Filter Combo 3-pk",
+        "Replacement for LG LT700P, ADQ36006102, Kenmore 46-9690, 469690, ADQ36006101-S, RFC1200A, WSL-3, FML-3, LT120F, Fridge Filter",
+        "Tier1 ADQ36006101 Refrigerator Water & Air Filter Combo 3-pk",
+        "Replacement for LG LT700P, ADQ36006102, Kenmore 46-9690, 469690, ADQ36006101-S, RFC1200A, WSL-3, FML-3, LT120F, Fridge Filter",
+        "NISPIRA Refrigerator Air Filter Compatible with LG LT120F ADQ73214404, 3 Packs",
+        "NISPIRA Refrigerator Air Filter Compatible with LG LT120F ADQ73214404, 3 Packs",
+        "<",
+        "endoftext",
+        ">"
+      ],
+      "predicted_asins": [
+        "<|ASIN_B08KXZPZR4|>",
+        "<|ASIN_B00HNEJHT6|>",
+        "<|ASIN_B000AST3AK|>",
+        "<|endoftext|>",
+        "<|endoftext|>"
+      ],
+      "predicted_names": [
+        "Unknown (<|ASIN_B08KXZPZR4|>)",
+        "GENUINE Frigidaire 242252702 Valve",
+        "GE MWF Refrigerator Water Filter | Certified to Reduce Lead, Sulfur, and 50+ Other Impurities | Replace Every 6 Months for Best Results | Pack of 1",
+        "Unknown (<|endoftext|>)",
+        "Unknown (<|endoftext|>)"
+      ],
+      "overlap_count": 1,
+      "overlap_items": [
+        "<|endoftext|>"
+      ],
+      "hit_rate": 1.0
+    },
+    {
+      "user_id": "AE23D7HHJAMENM7IKA4IOIHNS7OA",
+      "current_item": "4 Reusable K Cups for Keurig Coffee Makers - BPA Free Universal Fit Purple Refillable Kcups Coffee Filters for 1.0 and 2.0 Keurig Brewers",
+      "ground_truth_asins": [
+        "<|ASIN_B07P3Y8JWY|>",
+        "<|ASIN_B071WBXZFF|>",
+        "<|ASIN_B09H5JSBF9|>",
+        "<|ASIN_B087PJ2392|>",
+        "<|endoftext|>"
+      ],
+      "ground_truth_names": [
+        "Disposable Paper Coffee Filters 600 count - Compatible with Keurig, K-Cup machines & other Single Serve Coffee Brewer Reusable K Cups - Use Your Own Coffee & Make Your Own Pods - Works with All Brands",
+        "6 PCS Reusable Coffee Filter Replacement for Keurig K MINI PLUS Refillable K Cupsules 2.0 1.0 Small Coffee Pod Single Reuable Coffee Capsules (Purple/6)",
+        "Brew Addicts 100 Paper Coffee Filters - Compact Design Single-Use Coffee Filter for Keurig 1.0 & 2.0. Perfect Size and Quantity",
+        "Filterlogic UKF8001 Replacement for EveryDrop Filter 4, Whirlpool EDR4RXD1, Maytag 4396395, UKF8001AXX-200, UKF8001AXX-750, 46-9006, Puriclean II, FMM-2, FL-RF07, Refrigerator Water Filter, Pack of 3",
+        "<",
+        "endoftext",
+        ">"
+      ],
+      "predicted_asins": [
+        "<|ASIN_B01Q4SZV4W|>",
+        "<|ASIN_B01Q4SZV4W|>",
+        "<|ASIN_B01Q4SZV4W|>",
+        "<|endoftext|>",
+        "<|endoftext|>"
+      ],
+      "predicted_names": [
+        "Unknown (<|ASIN_B01Q4SZV4W|>)",
+        "Unknown (<|ASIN_B01Q4SZV4W|>)",
+        "Unknown (<|ASIN_B01Q4SZV4W|>)",
+        "Unknown (<|endoftext|>)",
+        "Unknown (<|endoftext|>)"
+      ],
+      "overlap_count": 1,
+      "overlap_items": [
+        "<|endoftext|>"
+      ],
+      "hit_rate": 1.0
+    },
+    {
+      "user_id": "AEIQNECVKJWLOOZA3N2TLOGMVXOQ",
+      "current_item": "RO6G WE25X205 for GE Dryer Drum Rear Bearing Sleeve Kit WE25M40 AP2619102 PS267583",
+      "ground_truth_asins": [
+        "<|ASIN_B07F3MV8QH|>",
+        "<|ASIN_B0B3M59Z1Z|>",
+        "<|ASIN_B004H3XT0Y|>",
+        "<|ASIN_B00DMUO1E6|>",
+        "<|ASIN_B07N82GT4R|>"
+      ],
+      "ground_truth_names": [
+        "UPGRADED Lifetime Appliance WE12X83 Pulley Idler Compatible with GE Dryer",
+        "4pcs WE1M1067 Drum Slide Kit for G-E and Hot-point Dryer Replacement WE1M333 PS755842 963512\u2026",
+        "GE WE3M26 Genuine OEM Front Drum Support Bearing for GE Dryers",
+        "GE WE1M1067 Genuine OEM Drum Slide/Glide/Pad for GE Dryers,Silver",
+        "WE12M29 Dryer Drum Drive Belt Replace for WE12M22, 137292700, WE120122, WE12M0022, AP4565702, PS3408299, 134163500 Compatible with GE/Hotpoint (About 89-1/2 Inches Length)"
+      ],
+      "predicted_asins": [
+        "<|ASIN_B07Y3Y2X5K|>",
+        "<|ASIN_B07Y3Y2X5K|>",
+        "<|ASIN_B07Y3Y2X5K|>",
+        "<|ASIN_B07Y3Y2X5K|>",
+        "<|endoftext|>"
+      ],
+      "predicted_names": [
+        "Unknown (<|ASIN_B07Y3Y2X5K|>)",
+        "Unknown (<|ASIN_B07Y3Y2X5K|>)",
+        "Unknown (<|ASIN_B07Y3Y2X5K|>)",
+        "Unknown (<|ASIN_B07Y3Y2X5K|>)",
+        "Unknown (<|endoftext|>)"
+      ],
+      "overlap_count": 0,
+      "overlap_items": [],
+      "hit_rate": 0.0
+    },
+    {
+      "user_id": "AHGJ6H2J7UM5BH7DX33WK5HSDXPQ",
+      "current_item": "Whirlpool Part Number 628366: Module Assembly (Includes Items 29 - 7 & 38)",
+      "ground_truth_asins": [
+        "<|ASIN_B07BRD46CR|>",
+        "<|ASIN_B01DNYOKHS|>",
+        "<|ASIN_B0B9H5NZRD|>",
+        "<|ASIN_B09V52JSV3|>",
+        "<|endoftext|>"
+      ],
+      "ground_truth_names": [
+        "Pureline EDR5RXD1, 4396508 Replacement for Whirlpool 4396508, EDR5RXD1, EveryDrop Filter 5, Refrigerator Water Filter - Reduces Bad Taste & Odor",
+        "Pack of 12 Replacement Charcoal Water Filters By Housewares Solutions for Keurig Brewers - Keurig Compatible Water Filter Cartridges Universal Fit (NOT CUISINART) for Keurig 2.0 & 1.0 Coffee Makers",
+        "Reston Lloyd Electric Stove Burner Covers, Set of 4, White",
+        "2 Pack 216702900 Freezer Door Key for Frigidaire Kenmore AP4071414 PS2061565 AP2113733 AP4301346 PS1991481 06599905 08037402 12849(Metal)",
+        "<",
+        "endoftext",
+        ">"
+      ],
+      "predicted_asins": [
+        "<|ASIN_B00UB38V2A|>",
+        "<|ASIN_B07LGY2XRK|>",
+        "<|ASIN_B005DNT7L2|>",
+        "<|ASIN_B0B2LC17LL|>",
+        "<|ASIN_B00A8O03LE|>"
+      ],
+      "predicted_names": [
+        "everydrop by Whirlpool Ice and Water Refrigerator Filter 4, EDR4RXD1, Single-Pack",
+        "JOVITEC 4392065 Dryer Repair Kit Including Belt 341241, Idler 691366, Rollers 349241t Replaces 4392065RC 279948 587636 80046 AP3131942",
+        "Samsung Washing Machine Drain Pump DC96-01585D",
+        "CAPMESSO Disposable Coffee Filters with Lid Kerig Paper Filter for Reusable Single Serve Pods Compatible with Keurg 2.0 & 1.0 Coffee Maker (White, 200)",
+        "Whirlpool W10404050 Latch Assembly"
+      ],
+      "overlap_count": 0,
+      "overlap_items": [],
+      "hit_rate": 0.0
+    },
+    {
+      "user_id": "AEQEE4BEVWTKZJR27L37QYB4PFQQ",
+      "current_item": "THE DRiP PAD - Refrigerator Drip Catcher for Water Tray, Protects Ice and Water Dispenser Pan From Spills, Mineral Build-Up and Water Splatter (2 pack, Black) (Rectangular)",
+      "ground_truth_asins": [
+        "<|ASIN_B0BDT5KW75|>",
+        "<|ASIN_B094XC113M|>",
+        "<|ASIN_B0B2LPB9HC|>",
+        "<|ASIN_B01MEEBCIT|>",
+        "<|endoftext|>"
+      ],
+      "ground_truth_names": [
+        "AuldHome Basket Coffee Filter Holder, White Enamel Filter Storage Container in Rustic Farmhouse Distressed Enamelware Design",
+        "Dishwasher Door Cover,Sunflower Magnetic Dishwasher Magnetic Sticker,Reusable Dishwasher Magnet Kitchen,Easily Trimmable Kitchen Dishwasher Sticker 23 W x 26 H inches",
+        "Coffee Filter Paper Holder, Reusable Metal Coffee Filters Paper Container Rack, Stainless Steel Coffee Paper Storage Rack for Home Kitchen Bar Cafes",
+        "Cuisinart DCC-1200PRC 12-Cup Replacement Glass Carafe, Black and Everyday 12-Pack Replacement Charcoal Water Filters for Cuisinart Coffee Machines Bundle",
+        "<",
+        "endoftext",
+        ">"
+      ],
+      "predicted_asins": [
+        "<|ASIN_B000AST3AK|>",
+        "<|ASIN_B079GTFR1W|>",
+        "<|ASIN_B07PK6XZ67|>",
+        "<|ASIN_B01N63XMK4|>",
+        "<|endoftext|>"
+      ],
+      "predicted_names": [
+        "GE MWF Refrigerator Water Filter | Certified to Reduce Lead, Sulfur, and 50+ Other Impurities | Replace Every 6 Months for Best Results | Pack of 1",
+        "PROKITCHEN Adjustable BBQ Grill Light with Magnetic Base Ultra-Bright Barbecue LED Light 360 Degree Flexible Gooseneck Water Resistant-Pack of 2",
+        "8536974 WPW10314173 PS11752609 Dryer Drum Support Roller Kit, Replace AP6019303 8536973 W10314173 W10314171 WPW10314173 PS11752609, Replacement for Whirlpool, Kenmore, Maytag (Pack of 4)",
+        "Best Choice Products Bathroom Vanity Table Set Makeup Desk Hair Dressing Organizer Black",
+        "Unknown (<|endoftext|>)"
+      ],
+      "overlap_count": 1,
+      "overlap_items": [
+        "<|endoftext|>"
+      ],
+      "hit_rate": 1.0
+    },
+    {
+      "user_id": "AHYLEFJZT6PC7NQ2FZYMN5CXOXYA",
+      "current_item": "Reusable Mesh Ground Coffee Filter Carafe for Keurig K-Duo Essentials and K Duo Brewers Machine, With 2 Refillable K Cups Pod by PureHQ - Gold Tone Mesh Filter - Value Pack",
+      "ground_truth_asins": [
+        "<|ASIN_B07L8GFMSP|>",
+        "<|ASIN_B0BGNFZ122|>",
+        "<|ASIN_B0C3CWNMQW|>",
+        "<|ASIN_B0BNPHQDPC|>",
+        "<|endoftext|>"
+      ],
+      "ground_truth_names": [
+        "ICEPURE ADQ747935 Replacement for LG LT1000P MDJ64844601, Kenmore Elite 9980, LT1000P/PC/PCS, LT1000, ADQ74793501 ADQ74793502 ADQ74793504 Refrigerator Water and LT120F ADQ73334008 Air Filter, 1Combo",
+        "Refrigerator Drip Catcher Tray: Cuttable Refrigerator Drip Tray for Fridge Water Dispenser, Absorbent Drip Tray, Refrigerator Accessories for Whirlpool, GE, Samsung (4PCS, Black) (Semi-Circular)",
+        "GLACIER FRESH LT1000PC Replacement Water Filter, Compatible with LT1000PC/PCS, LT1000PC, LT-1000PC Water Filter and LT120F ADQ73334008 Fresh Air Filter 4 Pack",
+        "Reusable K Cups Coffee Filters for Ninja Dual Brew,Refillable Coffee Pods Compatible with Ninja CFP301 CFP201 DualBrew Pro Coffee Makers (3)",
+        "<",
+        "endoftext",
+        ">"
+      ],
+      "predicted_asins": [
+        "<|ASIN_B00M4PQ1LZ|>",
+        "<|ASIN_B00M4PQ1LZ|>",
+        "<|ASIN_B00M4PQ1LZ|>",
+        "<|ASIN_B00M4PQ1LZ|>",
+        "<|endoftext|>"
+      ],
+      "predicted_names": [
+        "Unknown (<|ASIN_B00M4PQ1LZ|>)",
+        "Unknown (<|ASIN_B00M4PQ1LZ|>)",
+        "Unknown (<|ASIN_B00M4PQ1LZ|>)",
+        "Unknown (<|ASIN_B00M4PQ1LZ|>)",
+        "Unknown (<|endoftext|>)"
+      ],
+      "overlap_count": 1,
+      "overlap_items": [
+        "<|endoftext|>"
+      ],
+      "hit_rate": 1.0
+    }
+  ],
+  "paper_formatted_examples": [
+    "\n\\textbf{Example 1:} User purchased: \\textit{Range Kleen 8121 Electric Range and Oven Replacement Knob Kit, Chrome} \\\\\n\\textbf{Actual next purchases:} \\textit{Lifetime Appliance 3362624 Timer Knob Compatible with Whirlpool Washer}, \\textit{WaterSentinel WSG-1 Made in USA Refrigerator Replacement Filter: Fits GE MWF Filters\u2026}, \\textit{WaterSentinel WSG-1 Made in USA Refrigerator Replacement Filter: Fits GE MWF Filters\u2026}, \\textit{WaterSentinel WSG-1 Refrigerator Replacement Filter: Fits GE, Hot Point & Kenmore Filters (3-Pack), White/Blue}, \\textit{<} \\\\\n\\textbf{MM-GPT2Rec predictions:} \\textit{Unknown (<|ASIN\\_B00LKZ7OQ1|>)}, \\textit{Unknown (<|ASIN\\_B00LKZ7OQ1|>)}, \\textit{Snap Supply Dryer Igniter Replaces WE4X739}, \\textit{Unknown (<|ASIN\\_B00LKZ7OQ1|>)}, \\textit{Unknown (<|endoftext|>)} \\\\\n\\textbf{Analysis:} Correctly predicted 1 items: \\textit{Unknown (<|endoftext|>)}",
+    "\n\\textbf{Example 2:} User purchased: \\textit{Mist LT800P LG Refrigerator Water Filter, Compatible with LG Water Filter ADQ736134, LG ADQ736134 Water Filter, Kenmore 9490, 46-9490, 469490, ADQ73613402, LG LMXS30776S, LG LSXS26366S, 3 Pack} \\\\\n\\textbf{Actual next purchases:} \\textit{Tier1 ADQ36006101 Refrigerator Water & Air Filter Combo 3-pk}, \\textit{Replacement for LG LT700P, ADQ36006102, Kenmore 46-9690, 469690, ADQ36006101-S, RFC1200A, WSL-3, FML-3, LT120F, Fridge Filter}, \\textit{Tier1 ADQ36006101 Refrigerator Water & Air Filter Combo 3-pk}, \\textit{Replacement for LG LT700P, ADQ36006102, Kenmore 46-9690, 469690, ADQ36006101-S, RFC1200A, WSL-3, FML-3, LT120F, Fridge Filter}, \\textit{NISPIRA Refrigerator Air Filter Compatible with LG LT120F ADQ73214404, 3 Packs} \\\\\n\\textbf{MM-GPT2Rec predictions:} \\textit{Unknown (<|ASIN\\_B08KXZPZR4|>)}, \\textit{GENUINE Frigidaire 242252702 Valve}, \\textit{GE MWF Refrigerator Water Filter | Certified to Reduce Lead, Sulfur, and 50+ Other Impurities | Replace Every 6 Months for Best Results | Pack of 1}, \\textit{Unknown (<|endoftext|>)}, \\textit{Unknown (<|endoftext|>)} \\\\\n\\textbf{Analysis:} Correctly predicted 1 items: \\textit{Unknown (<|endoftext|>)}, \\textit{Unknown (<|endoftext|>)}",
+    "\n\\textbf{Example 3:} User purchased: \\textit{4 Reusable K Cups for Keurig Coffee Makers - BPA Free Universal Fit Purple Refillable Kcups Coffee Filters for 1.0 and 2.0 Keurig Brewers} \\\\\n\\textbf{Actual next purchases:} \\textit{Disposable Paper Coffee Filters 600 count - Compatible with Keurig, K-Cup machines & other Single Serve Coffee Brewer Reusable K Cups - Use Your Own Coffee & Make Your Own Pods - Works with All Brands}, \\textit{6 PCS Reusable Coffee Filter Replacement for Keurig K MINI PLUS Refillable K Cupsules 2.0 1.0 Small Coffee Pod Single Reuable Coffee Capsules (Purple/6)}, \\textit{Brew Addicts 100 Paper Coffee Filters - Compact Design Single-Use Coffee Filter for Keurig 1.0 & 2.0. Perfect Size and Quantity}, \\textit{Filterlogic UKF8001 Replacement for EveryDrop Filter 4, Whirlpool EDR4RXD1, Maytag 4396395, UKF8001AXX-200, UKF8001AXX-750, 46-9006, Puriclean II, FMM-2, FL-RF07, Refrigerator Water Filter, Pack of 3}, \\textit{<} \\\\\n\\textbf{MM-GPT2Rec predictions:} \\textit{Unknown (<|ASIN\\_B01Q4SZV4W|>)}, \\textit{Unknown (<|ASIN\\_B01Q4SZV4W|>)}, \\textit{Unknown (<|ASIN\\_B01Q4SZV4W|>)}, \\textit{Unknown (<|endoftext|>)}, \\textit{Unknown (<|endoftext|>)} \\\\\n\\textbf{Analysis:} Correctly predicted 1 items: \\textit{Unknown (<|endoftext|>)}, \\textit{Unknown (<|endoftext|>)}",
+    "\n\\textbf{Example 4:} User purchased: \\textit{RO6G WE25X205 for GE Dryer Drum Rear Bearing Sleeve Kit WE25M40 AP2619102 PS267583} \\\\\n\\textbf{Actual next purchases:} \\textit{UPGRADED Lifetime Appliance WE12X83 Pulley Idler Compatible with GE Dryer}, \\textit{4pcs WE1M1067 Drum Slide Kit for G-E and Hot-point Dryer Replacement WE1M333 PS755842 963512\u2026}, \\textit{GE WE3M26 Genuine OEM Front Drum Support Bearing for GE Dryers}, \\textit{GE WE1M1067 Genuine OEM Drum Slide/Glide/Pad for GE Dryers,Silver}, \\textit{WE12M29 Dryer Drum Drive Belt Replace for WE12M22, 137292700, WE120122, WE12M0022, AP4565702, PS3408299, 134163500 Compatible with GE/Hotpoint (About 89-1/2 Inches Length)} \\\\\n\\textbf{MM-GPT2Rec predictions:} \\textit{Unknown (<|ASIN\\_B07Y3Y2X5K|>)}, \\textit{Unknown (<|ASIN\\_B07Y3Y2X5K|>)}, \\textit{Unknown (<|ASIN\\_B07Y3Y2X5K|>)}, \\textit{Unknown (<|ASIN\\_B07Y3Y2X5K|>)}, \\textit{Unknown (<|endoftext|>)} \\\\\n\\textbf{Analysis:} No exact matches, but predictions show related products in the same category",
+    "\n\\textbf{Example 5:} User purchased: \\textit{Whirlpool Part Number 628366: Module Assembly (Includes Items 29 - 7 & 38)} \\\\\n\\textbf{Actual next purchases:} \\textit{Pureline EDR5RXD1, 4396508 Replacement for Whirlpool 4396508, EDR5RXD1, EveryDrop Filter 5, Refrigerator Water Filter - Reduces Bad Taste & Odor}, \\textit{Pack of 12 Replacement Charcoal Water Filters By Housewares Solutions for Keurig Brewers - Keurig Compatible Water Filter Cartridges Universal Fit (NOT CUISINART) for Keurig 2.0 & 1.0 Coffee Makers}, \\textit{Reston Lloyd Electric Stove Burner Covers, Set of 4, White}, \\textit{2 Pack 216702900 Freezer Door Key for Frigidaire Kenmore AP4071414 PS2061565 AP2113733 AP4301346 PS1991481 06599905 08037402 12849(Metal)}, \\textit{<} \\\\\n\\textbf{MM-GPT2Rec predictions:} \\textit{everydrop by Whirlpool Ice and Water Refrigerator Filter 4, EDR4RXD1, Single-Pack}, \\textit{JOVITEC 4392065 Dryer Repair Kit Including Belt 341241, Idler 691366, Rollers 349241t Replaces 4392065RC 279948 587636 80046 AP3131942}, \\textit{Samsung Washing Machine Drain Pump DC96-01585D}, \\textit{CAPMESSO Disposable Coffee Filters with Lid Kerig Paper Filter for Reusable Single Serve Pods Compatible with Keurg 2.0 & 1.0 Coffee Maker (White, 200)}, \\textit{Whirlpool W10404050 Latch Assembly} \\\\\n\\textbf{Analysis:} No exact matches, but predictions show related products in the same category",
+    "\n\\textbf{Example 6:} User purchased: \\textit{THE DRiP PAD - Refrigerator Drip Catcher for Water Tray, Protects Ice and Water Dispenser Pan From Spills, Mineral Build-Up and Water Splatter (2 pack, Black) (Rectangular)} \\\\\n\\textbf{Actual next purchases:} \\textit{AuldHome Basket Coffee Filter Holder, White Enamel Filter Storage Container in Rustic Farmhouse Distressed Enamelware Design}, \\textit{Dishwasher Door Cover,Sunflower Magnetic Dishwasher Magnetic Sticker,Reusable Dishwasher Magnet Kitchen,Easily Trimmable Kitchen Dishwasher Sticker 23 W x 26 H inches}, \\textit{Coffee Filter Paper Holder, Reusable Metal Coffee Filters Paper Container Rack, Stainless Steel Coffee Paper Storage Rack for Home Kitchen Bar Cafes}, \\textit{Cuisinart DCC-1200PRC 12-Cup Replacement Glass Carafe, Black and Everyday 12-Pack Replacement Charcoal Water Filters for Cuisinart Coffee Machines Bundle}, \\textit{<} \\\\\n\\textbf{MM-GPT2Rec predictions:} \\textit{GE MWF Refrigerator Water Filter | Certified to Reduce Lead, Sulfur, and 50+ Other Impurities | Replace Every 6 Months for Best Results | Pack of 1}, \\textit{PROKITCHEN Adjustable BBQ Grill Light with Magnetic Base Ultra-Bright Barbecue LED Light 360 Degree Flexible Gooseneck Water Resistant-Pack of 2}, \\textit{8536974 WPW10314173 PS11752609 Dryer Drum Support Roller Kit, Replace AP6019303 8536973 W10314173 W10314171 WPW10314173 PS11752609, Replacement for Whirlpool, Kenmore, Maytag (Pack of 4)}, \\textit{Best Choice Products Bathroom Vanity Table Set Makeup Desk Hair Dressing Organizer Black}, \\textit{Unknown (<|endoftext|>)} \\\\\n\\textbf{Analysis:} Correctly predicted 1 items: \\textit{Unknown (<|endoftext|>)}",
+    "\n\\textbf{Example 7:} User purchased: \\textit{Reusable Mesh Ground Coffee Filter Carafe for Keurig K-Duo Essentials and K Duo Brewers Machine, With 2 Refillable K Cups Pod by PureHQ - Gold Tone Mesh Filter - Value Pack} \\\\\n\\textbf{Actual next purchases:} \\textit{ICEPURE ADQ747935 Replacement for LG LT1000P MDJ64844601, Kenmore Elite 9980, LT1000P/PC/PCS, LT1000, ADQ74793501 ADQ74793502 ADQ74793504 Refrigerator Water and LT120F ADQ73334008 Air Filter, 1Combo}, \\textit{Refrigerator Drip Catcher Tray: Cuttable Refrigerator Drip Tray for Fridge Water Dispenser, Absorbent Drip Tray, Refrigerator Accessories for Whirlpool, GE, Samsung (4PCS, Black) (Semi-Circular)}, \\textit{GLACIER FRESH LT1000PC Replacement Water Filter, Compatible with LT1000PC/PCS, LT1000PC, LT-1000PC Water Filter and LT120F ADQ73334008 Fresh Air Filter 4 Pack}, \\textit{Reusable K Cups Coffee Filters for Ninja Dual Brew,Refillable Coffee Pods Compatible with Ninja CFP301 CFP201 DualBrew Pro Coffee Makers (3)}, \\textit{<} \\\\\n\\textbf{MM-GPT2Rec predictions:} \\textit{Unknown (<|ASIN\\_B00M4PQ1LZ|>)}, \\textit{Unknown (<|ASIN\\_B00M4PQ1LZ|>)}, \\textit{Unknown (<|ASIN\\_B00M4PQ1LZ|>)}, \\textit{Unknown (<|ASIN\\_B00M4PQ1LZ|>)}, \\textit{Unknown (<|endoftext|>)} \\\\\n\\textbf{Analysis:} Correctly predicted 1 items: \\textit{Unknown (<|endoftext|>)}"
+  ],
+  "asin_to_name_mapping_size": 10694
+}

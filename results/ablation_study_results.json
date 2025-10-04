@@ -1,39 +1,39 @@
 {
-    "timestamp": "2025-10-03T20:32:47.805182",
+    "timestamp": "2025-10-04T15:34:25.440214",
     "text_only": {
-        "hr@10": 0.133,
-        "precision@10": 0.015399999999999971,
-        "recall@10": 0.030799999999999942,
-        "mrr": 0.10018571428571425,
-        "ndcg@10": 0.11788411294906781,
+        "hr@5": 0.13652297489341544,
+        "precision@5": 0.030525817148270202,
+        "recall@5": 0.030525817148270202,
+        "mrr": 0.12118209229057167,
+        "ndcg@5": 0.1321636729348373,
         "model_type": "text_only"
     },
     "image_only": {},
     "multimodal_fusion": {
         "concatenation": {
-            "hr@10": 0.134,
-            "precision@10": 0.01519999999999997,
-            "recall@10": 0.03039999999999994,
-            "mrr": 0.09747738095238093,
-            "ndcg@10": 0.11476529164475104,
+            "hr@5": 0.0786,
+            "precision@5": 0.01652000000000012,
+            "recall@5": 0.01652000000000012,
+            "mrr": 0.06798666666666664,
+            "ndcg@5": 0.07273166814878775,
             "fusion_method": "concatenation"
         },
         "weighted": {
-            "hr@10": 0.134,
-            "precision@10": 0.01519999999999997,
-            "recall@10": 0.03039999999999994,
-            "mrr": 0.09747738095238093,
-            "ndcg@10": 0.11476529164475104,
+            "hr@5": 0.0786,
+            "precision@5": 0.01652000000000012,
+            "recall@5": 0.01652000000000012,
+            "mrr": 0.06798666666666664,
+            "ndcg@5": 0.07273166814878775,
             "fusion_method": "weighted",
             "text_weight": 0.5,
             "image_weight": 0.5
         },
         "attention": {
-            "hr@10": 0.134,
-            "precision@10": 0.01519999999999997,
-            "recall@10": 0.03039999999999994,
-            "mrr": 0.09747738095238093,
-            "ndcg@10": 0.11476529164475104,
+            "hr@5": 0.0786,
+            "precision@5": 0.01652000000000012,
+            "recall@5": 0.01652000000000012,
+            "mrr": 0.06798666666666664,
+            "ndcg@5": 0.07273166814878775,
             "fusion_method": "attention"
         }
     },
@@ -41,14 +41,14 @@
         "best_modality": "text",
         "best_fusion_method": "concatenation",
         "modality_contributions": {
-            "text": 0.133,
+            "text": 0.13652297489341544,
             "image": 0.0
         },
         "key_insights": [
-            "Text modality contributes 0.1330 HR@10",
+            "Text modality contributes 0.1365 HR@5",
             "Image modality skipped (poor performance and slow execution)",
-            "Best fusion method: concatenation (0.1340 HR@10)",
-            "Multimodal fusion provides improvement over text-only"
+            "Best fusion method: concatenation (0.0786 HR@5)",
+            "Text-only performs better than multimodal fusion"
         ]
     }
 }

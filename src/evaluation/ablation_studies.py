@@ -26,6 +26,7 @@ class AblationStudy:
     
     def __init__(self, config: Dict[str, Any]):
         self.config = config
+        self.k = config['data_config']['number_of_items_to_predict']
         self.results = {}
         
     def text_only_model(self, train_data: List[Dict], test_data: List[Dict], global_tfidf=None) -> Dict[str, float]:
@@ -88,7 +89,7 @@ class AblationStudy:
                 predicted_items = [item_ids[idx] for idx in top_indices]
             else:
                 # Cold start - use popular items
-                predicted_items = list(item_texts.keys())[:10]
+                predicted_items = list(item_texts.keys())[:self.k]
             
             predictions.append(predicted_items)
             targets.append(target_items)
@@ -97,7 +98,7 @@ class AblationStudy:
         metrics = self._calculate_metrics(predictions, targets)
         metrics['model_type'] = 'text_only'
         
-        logger.info(f"Text-only results: HR@10={metrics['hr@10']:.4f}, MRR={metrics['mrr']:.4f}")
+        logger.info(f"Text-only results: HR@{self.k}={metrics[f'hr@{self.k}']:.4f}, MRR={metrics['mrr']:.4f}")
         return metrics
     
     def image_only_model(self, train_data: List[Dict], test_data: List[Dict], 
@@ -150,10 +151,10 @@ class AblationStudy:
                 
                 # Get top recommendations
                 sorted_items = sorted(similarities.items(), key=lambda x: x[1], reverse=True)
-                predicted_items = [item_id for item_id, _ in sorted_items[:10]]
+                predicted_items = [item_id for item_id, _ in sorted_items[:self.k]]
             else:
                 # Cold start - use items with embeddings
-                predicted_items = list(item_avg_embeddings.keys())[:10]
+                predicted_items = list(item_avg_embeddings.keys())[:self.k]
             
             predictions.append(predicted_items)
             targets.append(target_items)
@@ -162,26 +163,39 @@ class AblationStudy:
         metrics = self._calculate_metrics(predictions, targets)
         metrics['model_type'] = 'image_only'
         
-        logger.info(f"Image-only results: HR@10={metrics['hr@10']:.4f}, MRR={metrics['mrr']:.4f}")
+        logger.info(f"Image-only results: HR@{self.k}={metrics[f'hr@{self.k}']:.4f}, MRR={metrics['mrr']:.4f}")
         return metrics
     
     def multimodal_fusion_comparison(self, train_data: List[Dict], test_data: List[Dict],
                                    image_embeddings: Dict[str, np.ndarray], global_tfidf=None) -> Dict[str, Dict[str, float]]:
         """
         Compare different multimodal fusion strategies.
+        Uses random 5000 samples for faster execution.
         """
         logger.info("Running multimodal fusion comparison...")
+        
+        # Use random 2000 samples for multimodal fusion (much faster)
+        import random
+        random.seed(42)  # For reproducibility
+        
+        fusion_train_size = min(2000, len(train_data))
+        fusion_test_size = min(2000, len(test_data))
+        
+        fusion_train_data = random.sample(train_data, fusion_train_size)
+        fusion_test_data = random.sample(test_data, fusion_test_size)
+        
+        logger.info(f"Using {fusion_train_size} train samples and {fusion_test_size} test samples for multimodal fusion comparison")
         
         fusion_results = {}
         
         # 1. Simple concatenation (current approach)
-        fusion_results['concatenation'] = self._concatenation_fusion(train_data, test_data, image_embeddings, global_tfidf)
+        fusion_results['concatenation'] = self._concatenation_fusion(fusion_train_data, fusion_test_data, image_embeddings, global_tfidf)
         
         # 2. Weighted fusion
-        fusion_results['weighted'] = self._weighted_fusion(train_data, test_data, image_embeddings, global_tfidf)
+        fusion_results['weighted'] = self._weighted_fusion(fusion_train_data, fusion_test_data, image_embeddings, global_tfidf)
         
         # 3. Attention-based fusion
-        fusion_results['attention'] = self._attention_fusion(train_data, test_data, image_embeddings, global_tfidf)
+        fusion_results['attention'] = self._attention_fusion(fusion_train_data, fusion_test_data, image_embeddings, global_tfidf)
         
         return fusion_results
     
@@ -415,10 +429,10 @@ class AblationStudy:
                 
                 # Get top recommendations
                 sorted_items = sorted(similarities.items(), key=lambda x: x[1], reverse=True)
-                predicted_items = [item_id for item_id, _ in sorted_items[:10]]
+                predicted_items = [item_id for item_id, _ in sorted_items[:self.k]]
             else:
                 # Cold start
-                predicted_items = list(item_features.keys())[:10]
+                predicted_items = list(item_features.keys())[:self.k]
             
             predictions.append(predicted_items)
             targets.append(target_items)
@@ -433,23 +447,23 @@ class AblationStudy:
         hits = 0
         total = len(predictions)
         for pred, target in zip(predictions, targets):
-            if any(item in target for item in pred[:10]):
+            if any(item in target for item in pred[:self.k]):
                 hits += 1
-        metrics['hr@10'] = hits / total if total > 0 else 0.0
+        metrics[f'hr@{self.k}'] = hits / total if total > 0 else 0.0
         
         # Precision@10
         total_precision = 0
         for pred, target in zip(predictions, targets):
-            hits = len(set(pred[:10]) & set(target))
-            total_precision += hits / 10
-        metrics['precision@10'] = total_precision / total if total > 0 else 0.0
+            hits = len(set(pred[:self.k]) & set(target))
+            total_precision += hits / self.k
+        metrics[f'precision@{self.k}'] = total_precision / total if total > 0 else 0.0
         
         # Recall@10
         total_recall = 0
         for pred, target in zip(predictions, targets):
-            hits = len(set(pred[:10]) & set(target))
+            hits = len(set(pred[:self.k]) & set(target))
             total_recall += hits / len(target) if len(target) > 0 else 0
-        metrics['recall@10'] = total_recall / total if total > 0 else 0.0
+        metrics[f'recall@{self.k}'] = total_recall / total if total > 0 else 0.0
         
         # MRR
         total_mrr = 0
@@ -465,11 +479,11 @@ class AblationStudy:
         for pred, target in zip(predictions, targets):
             dcg = 0
             idcg = 1
-            for i, item in enumerate(pred[:10]):
+            for i, item in enumerate(pred[:self.k]):
                 if item in target:
                     dcg += 1 / np.log2(i + 2)
             total_ndcg += dcg / idcg
-        metrics['ndcg@10'] = total_ndcg / total if total > 0 else 0.0
+        metrics[f'ndcg@{self.k}'] = total_ndcg / total if total > 0 else 0.0
         
         return metrics
     
@@ -499,13 +513,10 @@ class AblationStudy:
         """
         logger.info("Starting complete ablation study...")
         
-        # Limit dataset size for faster execution (use first 1000 samples)
-        max_samples = 1000
-        if len(train_data) > max_samples:
-            logger.info(f"Limiting ablation study to {max_samples} samples for faster execution")
-            train_data = train_data[:max_samples]
-        if len(test_data) > max_samples:
-            test_data = test_data[:max_samples]
+        # Use full dataset for text-only (fast with TF-IDF)
+        # Use random 2000 samples for multimodal fusion (much faster)
+        logger.info(f"Running ablation study: full dataset ({len(train_data)} train, {len(test_data)} test) for text-only")
+        logger.info("Multimodal fusion will use random 2000 samples for efficiency")
         
         # Create global TF-IDF vectorizer for efficiency
         global_tfidf = self._create_global_tfidf_vectorizer(train_data)
@@ -546,7 +557,7 @@ class AblationStudy:
         }
         
         # Compare modalities (image-only skipped)
-        text_score = results['text_only']['hr@10']
+        text_score = results['text_only'][f'hr@{self.k}']
         summary['best_modality'] = 'text'
         summary['modality_contributions']['text'] = text_score
         summary['modality_contributions']['image'] = 0.0  # Skipped
@@ -557,7 +568,7 @@ class AblationStudy:
         best_fusion_method = ''
         
         for method, metrics in fusion_results.items():
-            score = metrics['hr@10']
+            score = metrics[f'hr@{self.k}']
             if score > best_fusion_score:
                 best_fusion_score = score
                 best_fusion_method = method
@@ -565,9 +576,9 @@ class AblationStudy:
         summary['best_fusion_method'] = best_fusion_method
         
         # Generate insights
-        summary['key_insights'].append(f"Text modality contributes {text_score:.4f} HR@10")
+        summary['key_insights'].append(f"Text modality contributes {text_score:.4f} HR@{self.k}")
         summary['key_insights'].append("Image modality skipped (poor performance and slow execution)")
-        summary['key_insights'].append(f"Best fusion method: {best_fusion_method} ({best_fusion_score:.4f} HR@10)")
+        summary['key_insights'].append(f"Best fusion method: {best_fusion_method} ({best_fusion_score:.4f} HR@{self.k})")
         
         if best_fusion_score > text_score:
             summary['key_insights'].append("Multimodal fusion provides improvement over text-only")
