@@ -290,16 +290,6 @@ Our ablation studies demonstrate the value of multimodal integration:
 4. **Balanced Metrics**: Good precision (29.7%) and recall (32.4%) balance
 5. **Realistic Results**: No unrealistic perfect scores, credible performance metrics
 
-### Addressing Reviewers' Concerns
-
-Our updated evaluation addresses key concerns raised by reviewers:
-
-1. **✅ Realistic Performance**: No unrealistic perfect scores (HR@5 = 0.833, not 1.0)
-2. **✅ Multi-Domain Evaluation**: Multiple Amazon product categories
-3. **✅ Statistical Significance**: Multiple runs with confidence intervals
-4. **✅ Modality Analysis**: Comprehensive ablation studies showing multimodal value
-5. **✅ Credible Scale**: 10,555+ test samples across multiple categories
-
 ## Configuration
 
 ### Model Configuration
