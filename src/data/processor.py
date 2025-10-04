@@ -69,16 +69,83 @@ def filter_users_by_interactions(review_data: List[Dict], min_interactions: int 
     
     return filtered_data
 
+def filter_users_by_sequence_length(review_data: List[Dict], min_items_per_sequence: int = 8) -> List[Dict]:
+    """
+    Filter users to keep only those with sequences that have at least min_items_per_sequence items.
+    This ensures the model sees longer sequences during training.
+    """
+    # Group by user and create sequences
+    user_sequences = defaultdict(list)
+    for review in review_data:
+        user_id = review.get('user_id')
+        if user_id:
+            user_sequences[user_id].append(review)
+    
+    # Filter users with long enough sequences
+    valid_users = set()
+    for user_id, interactions in user_sequences.items():
+        if len(interactions) >= min_items_per_sequence:
+            valid_users.add(user_id)
+    
+    # Filter review data
+    filtered_data = [review for review in review_data 
+                    if review.get('user_id') in valid_users]
+    
+    logger.info(f"Original users: {len(user_sequences)}")
+    logger.info(f"Users with {min_items_per_sequence}+ items per sequence: {len(valid_users)}")
+    logger.info(f"Original reviews: {len(review_data)}")
+    logger.info(f"Filtered reviews: {len(filtered_data)}")
+    
+    return filtered_data
+
+def create_longer_sequences(df: pd.DataFrame, min_sequence_length: int = 8) -> pd.DataFrame:
+    """
+    Create longer sequences by combining multiple user interactions.
+    This helps the model learn to predict more items before stopping.
+    """
+    df_sorted = df.sort_values(by=['user_id', 'timestamp']).reset_index(drop=True)
+    enhanced_data = []
+    
+    for user_id, user_data in df_sorted.groupby('user_id'):
+        user_data = user_data.reset_index(drop=True)
+        
+        if len(user_data) < min_sequence_length:
+            continue
+            
+        # Create sliding window sequences
+        for i in range(len(user_data) - min_sequence_length + 1):
+            sequence = user_data.iloc[i:i + min_sequence_length]
+            
+            # Create input sequence (first 70% of items)
+            input_length = int(len(sequence) * 0.7)
+            input_sequence = sequence.iloc[:input_length]
+            
+            # Create target sequence (remaining 30% of items)
+            target_sequence = sequence.iloc[input_length:]
+            
+            # Add to enhanced data
+            enhanced_data.append({
+                'user_id': user_id,
+                'input_sequence': input_sequence['parent_asin'].tolist(),
+                'target_sequence': target_sequence['parent_asin'].tolist(),
+                'input_titles': input_sequence['title'].tolist(),
+                'target_titles': target_sequence['title'].tolist(),
+                'timestamp': sequence.iloc[0]['timestamp']
+            })
+    
+    return pd.DataFrame(enhanced_data)
+
 
 def get_next_items(
     df: pd.DataFrame,
     padding_strategy='repeat',
     pad_token="<|endoftext|>",
-    number_of_items_to_predict=5,
-    min_interactions=3
+    number_of_items_to_predict=10,
+    min_interactions=10
 ):
     """
     For each row in the dataframe, get the next N items the user interacted with.
+    Based on the successful LLMs-for-RecSys approach.
     
     Args:
         df (pd.DataFrame): Must have 'user_id', 'timestamp', 'parent_asin', 'title'
@@ -100,16 +167,19 @@ def get_next_items(
         if num_interactions < min_interactions:
             continue
 
-        for i in range(num_interactions):
-            # Get next items, but don't skip if there aren't enough
+        # Process items where we have enough future interactions
+        # Allow users with exactly min_interactions to contribute at least one sample
+        max_start_idx = max(0, num_interactions - number_of_items_to_predict)
+        for i in range(max_start_idx + 1):
+            # Get next items starting from i+1
             next_df = user_data.loc[i + 1:i + number_of_items_to_predict, :]
             next_items = next_df['parent_asin'].tolist()
             next_item_names = next_df['title'].tolist()
 
-            # Handle padding if needed
+            # Ensure we have exactly number_of_items_to_predict items
             if len(next_items) < number_of_items_to_predict:
                 num_missing = number_of_items_to_predict - len(next_items)
-
+                
                 if padding_strategy == 'repeat':
                     if len(next_items) > 0:
                         next_items += [next_items[-1]] * num_missing
@@ -124,7 +194,7 @@ def get_next_items(
                     next_item_names += [pad_token] * num_missing
 
                 elif padding_strategy == 'none':
-                    # Skip rows where next_10_items do not exist
+                    # Skip rows where we don't have enough next items
                     continue
 
             next_items_data.append((
@@ -177,32 +247,25 @@ def format_input_alpaca(entry):
 
 
 def format_input_phi(entry):
-    """ 
-    Phi-3 prompt template
-    This prompt template is substantially shorter, which reduces the runtime and hardware requirements for 
-    finetuning the LLM and generating text since the input prompts are shorter. 
-    It formats the data entry as follows:
-
-    <user>
-    Identify the correct spelling of the following word: 'Occasion'
-
-    <assistant>
-    The correct spelling is 'Occasion'.
-    """ 
-
-    instruction_text = (
-        f"<|user|>\n{entry['instruction']}"
-    )
-
-    input_text = f"\n{entry['input']}" if entry["input"] else ""
-
-    return instruction_text + input_text
+    """
+    Format entry according to the Phi-3-style prompt template.
+    """
+    # Handle missing fields gracefully
+    instruction = entry.get('instruction', 'Given a user\'s purchase history and review for a product, predict the next 10 products they would likely purchase.')
+    input_text = entry.get('input', '')
+    
+    # Create Phi-3 format (no truncation - handled in training)
+    formatted_text = f"<|user|>\n{instruction}\n{input_text}<|end|>\n<|assistant|>\n"
+    
+    return formatted_text
 
 
 def split_data_temporal(df, train_ratio=0.7, val_ratio=0.15, test_ratio=0.15):
     """
-    Splits the data into train, validation, and test sets based on timestamps.
-    This ensures no future data leaks into training.
+    Splits the data into train, validation, and test sets PER USER based on temporal order.
+    This ensures proper item overlap between train and test while maintaining temporal ordering.
+    
+    Matches the approach from successful LLMs-for-RecSys project.
 
     Args:
     - df (pd.DataFrame): DataFrame containing user interactions with 'user_id' and 'date' columns.
@@ -220,24 +283,37 @@ def split_data_temporal(df, train_ratio=0.7, val_ratio=0.15, test_ratio=0.15):
     # Convert date strings to datetime objects
     df['date'] = pd.to_datetime(df['date'])
 
-    # Sort all data by date
-    df_sorted = df.sort_values('date').reset_index(drop=True)
+    # Split PER USER to ensure item overlap
+    train_list = []
+    val_list = []
+    test_list = []
     
-    # Find cutoff dates for splits
-    total_days = (df_sorted['date'].max() - df_sorted['date'].min()).days
-    train_end_date = df_sorted['date'].min() + pd.Timedelta(days=int(total_days * train_ratio))
-    val_end_date = train_end_date + pd.Timedelta(days=int(total_days * val_ratio))
-
-    # Split data based on dates
-    train_df = df_sorted[df_sorted['date'] < train_end_date].copy()
-    val_df = df_sorted[(df_sorted['date'] >= train_end_date) & 
-                       (df_sorted['date'] < val_end_date)].copy()
-    test_df = df_sorted[df_sorted['date'] >= val_end_date].copy()
+    for user_id, user_data in df.groupby('user_id'):
+        # Sort user's data by date
+        user_sorted = user_data.sort_values('date').reset_index(drop=True)
+        n = len(user_sorted)
+        
+        # Calculate split indices for this user
+        train_end_idx = int(n * train_ratio)
+        val_end_idx = int(n * (train_ratio + val_ratio))
+        
+        # Split this user's data
+        train_list.append(user_sorted.iloc[:train_end_idx])
+        val_list.append(user_sorted.iloc[train_end_idx:val_end_idx])
+        test_list.append(user_sorted.iloc[val_end_idx:])
+    
+    # Combine all users' splits
+    train_df = pd.concat(train_list, ignore_index=True) if train_list else pd.DataFrame()
+    val_df = pd.concat(val_list, ignore_index=True) if val_list else pd.DataFrame()
+    test_df = pd.concat(test_list, ignore_index=True) if test_list else pd.DataFrame()
 
     # Convert dates back to strings in YYYY-MM-DD format
-    train_df['date'] = train_df['date'].dt.strftime('%Y-%m-%d')
-    val_df['date'] = val_df['date'].dt.strftime('%Y-%m-%d')  
-    test_df['date'] = test_df['date'].dt.strftime('%Y-%m-%d')
+    if not train_df.empty:
+        train_df['date'] = train_df['date'].dt.strftime('%Y-%m-%d')
+    if not val_df.empty:
+        val_df['date'] = val_df['date'].dt.strftime('%Y-%m-%d')
+    if not test_df.empty:
+        test_df['date'] = test_df['date'].dt.strftime('%Y-%m-%d')
 
     # Reset indices
     train_df = train_df.reset_index(drop=True)
@@ -245,9 +321,9 @@ def split_data_temporal(df, train_ratio=0.7, val_ratio=0.15, test_ratio=0.15):
     test_df = test_df.reset_index(drop=True)
 
     # Log split statistics
-    logger.info(f"Train period: {df_sorted['date'].min().strftime('%Y-%m-%d')} to {train_end_date.strftime('%Y-%m-%d')}")
-    logger.info(f"Val period: {train_end_date.strftime('%Y-%m-%d')} to {val_end_date.strftime('%Y-%m-%d')}")
-    logger.info(f"Test period: {val_end_date.strftime('%Y-%m-%d')} to {df_sorted['date'].max().strftime('%Y-%m-%d')}")
+    logger.info(f"Train period: {train_df['date'].min()} to {train_df['date'].max()}")
+    logger.info(f"Val period: {val_df['date'].min()} to {val_df['date'].max()}")
+    logger.info(f"Test period: {test_df['date'].min()} to {test_df['date'].max()}")
 
     return train_df, val_df, test_df
 

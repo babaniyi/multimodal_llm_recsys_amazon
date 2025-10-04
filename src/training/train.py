@@ -18,6 +18,35 @@ import numpy as np
 import gc
 import sys
 
+def setup_cuda():
+    """Setup CUDA with proper memory allocation settings."""
+    if torch.cuda.is_available():
+        # Fix the multiprocessing issue
+        torch.cuda.memory._set_allocator_settings('expandable_segments:False')
+        
+        # Clear any existing cache
+        torch.cuda.empty_cache()
+        
+        # Set memory fraction to avoid OOM (more conservative)
+        torch.cuda.set_per_process_memory_fraction(0.6)
+        
+        print(f"CUDA setup complete:")
+        print(f"   - Device: {torch.cuda.get_device_name(0)}")
+        print(f"   - Memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.1f} GB")
+        print(f"   - Expandable segments: False")
+        return True
+    else:
+        print("CUDA not available, using CPU")
+        return False
+
+# Fix CUDA multiprocessing issue properly
+if torch.cuda.is_available():
+    torch.cuda.memory._set_allocator_settings('expandable_segments:False')
+    print(f"CUDA available: {torch.cuda.device_count()} devices")
+    print(f"Using device: {torch.cuda.get_device_name(0)}")
+else:
+    print("CUDA not available, using CPU")
+
 from transformers.models.gpt2 import GPT2Model
 
 from ..models.model import assign_check, load_weights, train_model
@@ -51,7 +80,9 @@ set_seed(42)
 
 
 def main():
-
+    # Setup CUDA properly first
+    use_cuda = setup_cuda()
+    
     data_dir = Path("data")
     raw_dir = data_dir / "raw"
     processed_dir = data_dir / "processed"
@@ -139,11 +170,13 @@ def main():
             multimodal_encoder = None
 
     logger.info("Creating training dataset...")
-    train_dataset = CustomDataset(train_data, tokenizer, special_user_item_ids, multimodal_encoder=multimodal_encoder)
+    train_dataset = CustomDataset(train_data, tokenizer, special_user_item_ids, 
+                                 multimodal_encoder=multimodal_encoder, config=config)
     logger.info(f"Training dataset created with {len(train_dataset)} samples")
     
     logger.info("Creating validation dataset...")
-    val_dataset = CustomDataset(val_data, tokenizer, special_user_item_ids, multimodal_encoder=multimodal_encoder)
+    val_dataset = CustomDataset(val_data, tokenizer, special_user_item_ids, 
+                               multimodal_encoder=multimodal_encoder, config=config)
     logger.info(f"Validation dataset created with {len(val_dataset)} samples")
 
 
@@ -287,7 +320,7 @@ def main():
 
     num_epochs = int(config['training_config']['num_epochs'])
     optimizer = torch.optim.AdamW(model.parameters(), lr=config['training_config']['learning_rate'], weight_decay=config['training_config']['weight_decay'])
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=5, verbose=True)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=5)
 
     start_context = format_input_phi(val_data[0]) if phi3_prompt else format_input_alpaca(val_data[0])
 

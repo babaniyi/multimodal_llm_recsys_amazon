@@ -17,6 +17,51 @@ import os
 
 logger = logging.getLogger(__name__)
 
+class ImprovedCrossAttention(nn.Module):
+    """Enhanced cross-attention for better multimodal fusion."""
+    def __init__(self, d_model, num_heads, dropout=0.1):
+        super().__init__()
+        self.cross_attention = nn.MultiheadAttention(
+            embed_dim=d_model,
+            num_heads=num_heads,
+            dropout=dropout,
+            batch_first=True
+        )
+        self.norm = nn.LayerNorm(d_model)
+        self.dropout = nn.Dropout(dropout)
+        
+    def forward(self, text_features, image_features, attention_mask=None):
+        """Cross-attention between text and image features."""
+        attended_text, _ = self.cross_attention(
+            text_features, image_features, image_features,
+            key_padding_mask=attention_mask
+        )
+        # Residual connection and layer norm
+        output = self.norm(text_features + self.dropout(attended_text))
+        return output
+
+class ProgressivePredictionHead(nn.Module):
+    """Progressive prediction heads for item and stop prediction."""
+    def __init__(self, d_model, vocab_size, dropout=0.1):
+        super().__init__()
+        self.item_head = nn.Sequential(
+            nn.Linear(d_model, d_model * 2),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(d_model * 2, vocab_size)
+        )
+        self.stop_head = nn.Sequential(
+            nn.Linear(d_model, d_model),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(d_model, 2)  # Binary: continue/stop
+        )
+        
+    def forward(self, hidden_states):
+        item_logits = self.item_head(hidden_states)
+        stop_logits = self.stop_head(hidden_states)
+        return item_logits, stop_logits
+
 class MultiHeadAttention(nn.Module):
     def __init__(self, d_in, d_out, context_length, dropout, num_heads, qkv_bias=False):
         super().__init__()
@@ -155,7 +200,35 @@ class GPTModel(nn.Module):
             *[TransformerBlock(cfg) for _ in range(cfg["n_layers"])])
 
         self.final_norm = LayerNorm(cfg["emb_dim"])
-        self.out_head = nn.Linear(cfg["emb_dim"], cfg["vocab_size"], bias=False)
+        
+        # Enhanced multimodal components
+        self.use_improved_multimodal = cfg.get("use_improved_multimodal", False)
+        if self.use_improved_multimodal:
+            # Cross-attention for multimodal fusion
+            self.cross_attention = ImprovedCrossAttention(
+                d_model=cfg["emb_dim"],
+                num_heads=cfg.get("num_heads", 8),
+                dropout=cfg.get("dropout", 0.1)
+            )
+            
+            # Progressive prediction heads
+            self.progressive_head = ProgressivePredictionHead(
+                d_model=cfg["emb_dim"],
+                vocab_size=cfg["vocab_size"],
+                dropout=cfg.get("dropout", 0.1)
+            )
+            
+            # Image encoder for better image processing
+            self.image_encoder = nn.Sequential(
+                nn.Linear(cfg.get("image_embedding_dim", 2048), 1024),
+                nn.ReLU(),
+                nn.Dropout(0.1),
+                nn.Linear(1024, cfg["emb_dim"]),
+                nn.LayerNorm(cfg["emb_dim"])
+            )
+        else:
+            # Original output head
+            self.out_head = nn.Linear(cfg["emb_dim"], cfg["vocab_size"], bias=False)
         
         # Enable gradient checkpointing by default
         self.gradient_checkpointing = False
@@ -171,12 +244,20 @@ class GPTModel(nn.Module):
         """Disable gradient checkpointing."""
         self.gradient_checkpointing = False
 
-    def forward(self, in_idx):
+    def forward(self, in_idx, image_embeddings=None, attention_mask=None, return_multimodal_outputs=False):
         batch_size, seq_len = in_idx.shape
         tok_embeds = self.tok_emb(in_idx)
         pos_embeds = self.pos_emb(torch.arange(seq_len, device=in_idx.device))
         x = tok_embeds + pos_embeds  # Shape [batch_size, num_tokens, emb_size]
         x = self.drop_emb(x)
+        
+        # Process image embeddings if available and using improved multimodal
+        if self.use_improved_multimodal and image_embeddings is not None:
+            # Encode image embeddings to match text dimension
+            image_features = self.image_encoder(image_embeddings)
+            
+            # Apply cross-attention between text and images
+            x = self.cross_attention(x, image_features, attention_mask)
         
         # Apply gradient checkpointing if enabled
         if self.gradient_checkpointing:
@@ -197,8 +278,20 @@ class GPTModel(nn.Module):
             x = self.trf_blocks(x)
             
         x = self.final_norm(x)
-        logits = self.out_head(x)
-        return logits
+        
+        # Generate outputs based on model configuration
+        if self.use_improved_multimodal and return_multimodal_outputs:
+            # Use progressive prediction heads
+            item_logits, stop_logits = self.progressive_head(x)
+            return {
+                'item_logits': item_logits,
+                'stop_logits': stop_logits,
+                'hidden_states': x
+            }
+        else:
+            # Use original output head
+            logits = self.out_head(x)
+            return logits
 
 
         
@@ -372,7 +465,7 @@ def token_ids_to_text(token_ids, tokenizer):
 
 
 def calc_loss_batch(input_batch, target_batch, model, device):
-    """Calculate loss for a batch of data."""
+    """Calculate loss for a batch of data with weighted stop prediction."""
     input_batch = input_batch.to(device)
     target_batch = target_batch.to(device)
     
@@ -385,10 +478,19 @@ def calc_loss_batch(input_batch, target_batch, model, device):
     if torch.isnan(logits).any() or torch.isinf(logits).any():
         logger.error("NaN or Inf detected in logits")
     
-    # Calculate loss
+    # Get EOS token ID (assuming it's the last token in vocab)
+    eos_token_id = logits.shape[-1] - 1  # Adjust based on your tokenizer
+    
+    # Create weights for loss calculation
+    # Give higher weight to EOS predictions to improve stop prediction
+    weights = torch.ones(logits.shape[-1], device=device)
+    weights[eos_token_id] = 2.0  # Double weight for EOS token
+    
+    # Calculate weighted loss
     loss = torch.nn.functional.cross_entropy(
         logits.flatten(0, 1),
-        target_batch.flatten()
+        target_batch.flatten(),
+        weight=weights
     )
 
     # Check for NaN or Inf values in loss
@@ -512,6 +614,11 @@ def train_model(model, train_loader, val_loader, optimizer, scheduler, device, c
         torch.backends.cuda.matmul.allow_tf32 = True  # Enable TF32 for faster computation
         torch.backends.cudnn.benchmark = True  # Enable cuDNN benchmarking
 
+        # Early stopping variables
+        best_val_loss = float('inf')
+        patience_counter = 0
+        early_stopping_patience = config['training_config'].get('early_stopping_patience', 3)
+        min_delta = config['training_config'].get('early_stopping_min_delta', 0.001)
         
         for epoch in range(start_epoch, config['training_config']['num_epochs']):
             model.train()
@@ -578,8 +685,18 @@ def train_model(model, train_loader, val_loader, optimizer, scheduler, device, c
                 scaler.step(optimizer)
                 scaler.update()
                 
+                # Clear CUDA cache periodically to prevent OOM
+                if global_step % 10 == 0:
+                    torch.cuda.empty_cache()
+                
                 tokens_seen += input_batch.numel()
                 global_step += 1
+                
+                # Check max training steps limit
+                max_steps = config['training_config'].get('max_training_steps', 1000)
+                if global_step >= max_steps:
+                    logger.info(f"Reached maximum training steps ({max_steps}), stopping training")
+                    return model, train_losses, val_losses, track_tokens_seen
                 
                 if global_step % config['training_config']['eval_freq'] == 0:
                     train_loss, val_loss = evaluate_model(
@@ -589,6 +706,20 @@ def train_model(model, train_loader, val_loader, optimizer, scheduler, device, c
                     track_tokens_seen.append(tokens_seen)
                     logger.info(f"Ep {epoch+1} (Step {global_step:06d}): "
                             f"Train loss {train_loss:.3f}, Val loss {val_loss:.3f}")
+                    
+                    # Early stopping check
+                    if val_loss < best_val_loss - min_delta:
+                        best_val_loss = val_loss
+                        patience_counter = 0
+                        logger.info(f"New best validation loss: {val_loss:.3f}")
+                    else:
+                        patience_counter += 1
+                        logger.info(f"No improvement for {patience_counter} evaluations")
+                        
+                        if patience_counter >= early_stopping_patience:
+                            logger.info(f"Early stopping triggered after {patience_counter} evaluations without improvement")
+                            logger.info(f"Best validation loss: {best_val_loss:.3f}")
+                            return model, train_losses, val_losses, track_tokens_seen
                     
                     # Save checkpoint
                     if checkpoint_path:

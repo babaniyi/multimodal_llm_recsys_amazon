@@ -3,6 +3,7 @@ import logging
 from pathlib import Path
 import json
 import numpy as np
+import pandas as pd
 import tiktoken
 import os
 
@@ -45,6 +46,83 @@ def main():
     #TEST_MODE = json.loads(TEST_MODE)
     TEST_SIZE = int(config['model_config']['test_size'])   # Number of items to process in test mode
 
+    # Check if multi-category mode is enabled
+    USE_MULTI_CATEGORY = config['data_config'].get('use_multiple_categories', False)
+    
+    # Check if data already exists (check for both old and new formats)
+    train_file = processed_dir / "train.json"
+    val_file = processed_dir / "val.json"
+    test_file = processed_dir / "test.json"
+    processed_data_file = processed_dir / "processed_data.jsonl"
+    special_ids_file = processed_dir / "special_user_item_ids.json"
+    
+    # Check if we have the split files OR the processed data file
+    data_exists = (train_file.exists() and val_file.exists() and test_file.exists()) or processed_data_file.exists()
+    
+    if data_exists:
+        logger.info("Data files already exist, loading from cache...")
+        
+        # Check which format we have
+        if train_file.exists() and val_file.exists() and test_file.exists():
+            logger.info(f"   - Train: {train_file}")
+            logger.info(f"   - Val: {val_file}")
+            logger.info(f"   - Test: {test_file}")
+            
+            # Load existing split data
+            with open(train_file, 'r') as f:
+                train_data = json.load(f)
+            with open(val_file, 'r') as f:
+                val_data = json.load(f)
+            with open(test_file, 'r') as f:
+                test_data = json.load(f)
+            
+            review_data = train_data + val_data + test_data
+            logger.info(f"Loaded {len(review_data)} total records from split files")
+            
+        elif processed_data_file.exists():
+            logger.info(f"   - Processed data: {processed_data_file}")
+            
+            # Load existing processed data
+            review_data = []
+            with open(processed_data_file, 'r') as f:
+                for line in f:
+                    review_data.append(json.loads(line.strip()))
+            
+            logger.info(f"Loaded {len(review_data)} total records from processed data")
+            
+            # Generate train/test/val splits from processed data
+            logger.info("Generating train/test/val splits from processed data...")
+            train_data, val_data, test_data = split_data(review_data, config)
+            
+            # Save the splits
+            with open(train_file, 'w') as f:
+                json.dump(train_data, f, indent=2)
+            with open(val_file, 'w') as f:
+                json.dump(val_data, f, indent=2)
+            with open(test_file, 'w') as f:
+                json.dump(test_data, f, indent=2)
+            
+            logger.info(f"Generated splits: Train={len(train_data)}, Val={len(val_data)}, Test={len(test_data)}")
+            
+            # Generate statistics
+            logger.info("Generating data statistics...")
+            stats = generate_data_statistics(train_data, val_data, test_data, review_data)
+            stats_file = processed_dir / "data_stats.json"
+            with open(stats_file, 'w') as f:
+                json.dump(stats, f, indent=2)
+            logger.info(f"Statistics saved to: {stats_file}")
+        
+        # Only create special_user_item_ids.json if missing
+        if not special_ids_file.exists():
+            logger.info("Creating missing special_user_item_ids.json...")
+            special_user_item_ids = ["<|endoftext|>"] + list(set([entry.get('asin', '') for entry in review_data if entry.get('asin')]))
+            with open(special_ids_file, 'w') as f:
+                json.dump(special_user_item_ids, f, indent=2)
+            logger.info(f"Created special_user_item_ids.json with {len(special_user_item_ids)} items")
+        
+        logger.info("Data preparation completed using cached data!")
+        return
+
     # Load data
     logger.info("Loading review data...")
     review_data = processor.load_jsonl(raw_dir / "Appliances.jsonl")
@@ -55,9 +133,15 @@ def main():
         # Take a random sample of reviews
         review_data = review_data[:TEST_SIZE]
 
-    # Filter users with at least 2 interactions
+    # Filter users with at least min_interactions interactions
     logger.info(f"Filtering users with at least {config['data_config']['min_interactions']} interactions...")
     filtered_review_data = processor.filter_users_by_interactions(review_data, min_interactions=config['data_config']['min_interactions'])
+    
+    # Additional filtering for longer sequences if enabled
+    if config['data_config'].get('sequence_aware_training', False):
+        min_items_per_sequence = config['data_config'].get('min_items_per_sequence', 8)
+        logger.info(f"Additional filtering for users with {min_items_per_sequence}+ items per sequence...")
+        filtered_review_data = processor.filter_users_by_sequence_length(filtered_review_data, min_items_per_sequence=min_items_per_sequence)
 
     # Get unique parent_asins from filtered reviews
     valid_parent_asins = set(review.get('parent_asin') for review in filtered_review_data)
@@ -160,6 +244,28 @@ def main():
 
     df_model_ready = merged_df.copy()
 
+    # Create proper input format matching LLMs-for-RecSys approach
+    # Include item details in the input for better context
+    def create_input_text(row):
+        parts = [f"<|user_{row['user_id']}|>"]
+        
+        # Add item details
+        if pd.notna(row.get('parent_asin')):
+            parts.append(f"Item id is {row['parent_asin']}.")
+        if pd.notna(row.get('rating')):
+            parts.append(f"Rating of the item by user from 1 to 5 is {row['rating']}.")
+        if pd.notna(row.get('review_title')):
+            parts.append(f"Review title: {row['review_title']}.")
+        if pd.notna(row.get('title')):
+            parts.append(f"Item name is {row['title']}.")
+        if pd.notna(row.get('main_category')):
+            parts.append(f"Main category of the item is {row['main_category']}.")
+        
+        return " ".join(parts)
+    
+    df_model_ready['input'] = df_model_ready.apply(create_input_text, axis=1)
+    
+    # Rename columns to match expected format
     df_model_ready = df_model_ready.rename(columns={'next_items': "output", 'next_item_names': "output_names"})
     df_model_ready['instruction'] = config['data_config']['user_prompt']
 
@@ -205,6 +311,92 @@ def main():
 
 
 
+
+
+def split_data(data, config):
+    """Split data into train/val/test sets."""
+    from sklearn.model_selection import train_test_split
+    
+    # Get split ratios
+    train_ratio = config['data_split_ratio']['train_ratio']
+    val_ratio = config['data_split_ratio']['val_ratio']
+    test_ratio = config['data_split_ratio']['test_ratio']
+    
+    # First split: train vs (val + test)
+    train_data, temp_data = train_test_split(
+        data, 
+        test_size=(val_ratio + test_ratio),
+        random_state=42
+    )
+    
+    # Second split: val vs test
+    val_data, test_data = train_test_split(
+        temp_data,
+        test_size=(test_ratio / (val_ratio + test_ratio)),
+        random_state=42
+    )
+    
+    return train_data, val_data, test_data
+
+
+def generate_data_statistics(train_data, val_data, test_data, all_data):
+    """Generate comprehensive data statistics."""
+    stats = {
+        "dataset_overview": {
+            "total_records": len(all_data),
+            "train_records": len(train_data),
+            "val_records": len(val_data),
+            "test_records": len(test_data),
+            "train_ratio": len(train_data) / len(all_data),
+            "val_ratio": len(val_data) / len(all_data),
+            "test_ratio": len(test_data) / len(all_data)
+        },
+        "user_statistics": {},
+        "item_statistics": {},
+        "category_statistics": {},
+        "text_statistics": {}
+    }
+    
+    # User statistics
+    all_users = set()
+    all_items = set()
+    all_categories = set()
+    text_lengths = []
+    
+    for entry in all_data:
+        if 'user_id' in entry:
+            all_users.add(entry['user_id'])
+        if 'asin' in entry:
+            all_items.add(entry['asin'])
+        if 'category' in entry:
+            all_categories.add(entry['category'])
+        if 'input' in entry:
+            text_lengths.append(len(entry['input']))
+    
+    stats["user_statistics"] = {
+        "unique_users": len(all_users),
+        "avg_interactions_per_user": len(all_data) / len(all_users) if all_users else 0
+    }
+    
+    stats["item_statistics"] = {
+        "unique_items": len(all_items),
+        "avg_interactions_per_item": len(all_data) / len(all_items) if all_items else 0
+    }
+    
+    stats["category_statistics"] = {
+        "unique_categories": len(all_categories),
+        "categories": list(all_categories)
+    }
+    
+    if text_lengths:
+        stats["text_statistics"] = {
+            "avg_text_length": sum(text_lengths) / len(text_lengths),
+            "min_text_length": min(text_lengths),
+            "max_text_length": max(text_lengths),
+            "median_text_length": sorted(text_lengths)[len(text_lengths)//2]
+        }
+    
+    return stats
 
 
 if __name__ == "__main__":

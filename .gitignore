@@ -92,6 +92,7 @@ data/processed/
 *on_start.sh.log
 *settings.json
 info.txt
+paper/
 
 # virtual environment
 mlm_recsys/
