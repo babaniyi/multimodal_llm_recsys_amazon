@@ -1,6 +1,6 @@
 # Enhancing Product Recommendation with Multimodal LLMs
 
-This repository contains the implementation for the paper **"Enhancing Product Recommendation with Multimodal LLMs"**, which explores the use of multimodal language models to improve product recommendation systems by incorporating both textual and visual information.
+This repository contains the implementation for the paper [Enhancing Product Recommendation with Multimodal LLMs](https://isir-ecom.github.io/papers_presentations_talks/ISIReCom-2025_paper4.pdf), which explores the use of multimodal language models to improve product recommendation systems by incorporating both textual and visual information.
 
 ## Table of Contents
 
@@ -106,6 +106,8 @@ The system consists of several key components:
 ## Data Preparation
 
 ### Amazon Product Data
+We evaluated our approach on a subset of the Amazon Product dataset [Download data here](https://amazon-reviews-2023.github.io/), a public collection of Amazon product reviews and metadata. 
+Specifically, we selected multiple categories (Appliances, Digital Music, Gift Cards, Health and Personal Care) to ensure diversity and generalizability.
 
 The system is designed to work with Amazon product review and metadata data. The data processing pipeline handles:
 
