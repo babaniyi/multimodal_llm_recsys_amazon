@@ -36,3 +36,6 @@ flake8>=6.1.0
 
 # Optional dependencies
 python-dotenv>=1.0.0
+
+# Interactive demo (example gallery + optional live inference)
+streamlit>=1.28.0
