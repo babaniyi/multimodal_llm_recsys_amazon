@@ -25,16 +25,14 @@ def _inject_demo_styles() -> None:
     st.markdown(
         """
 <style>
-  .demo-no-photo {
-    min-height: 140px; display: flex; align-items: center; justify-content: center;
-    border-radius: 10px; margin-bottom: 0.5rem; font-size: 0.88rem;
-    border: 1px dashed rgba(128,128,128,0.35); color: rgba(128,128,128,0.85);
-  }
-  .demo-stop-card {
-    min-height: 100px; display: flex; align-items: center; justify-content: center;
-    border-radius: 10px; margin-bottom: 0.5rem; font-weight: 600; font-size: 0.95rem;
-    border: 1px solid rgba(99, 102, 241, 0.35); color: inherit;
-  }
+  .demo-lead { font-size: 1.05rem; line-height: 1.55; color: rgba(250,250,250,0.88); margin-bottom: 1.25rem; max-width: 52rem; }
+  .demo-rail-title { font-size: 1.05rem; font-weight: 600; letter-spacing: -0.02em; margin: 0 0 0.65rem 0;
+    padding-bottom: 0.4rem; border-bottom: 1px solid rgba(250,250,250,0.12); color: #fafafa; }
+  .demo-card-title { font-size: 0.82rem; font-weight: 500; line-height: 1.35; margin: 0.35rem 0 0 0; color: rgba(250,250,250,0.95); }
+  .demo-img-placeholder { min-height: 120px; display: flex; align-items: center; justify-content: center;
+    background: rgba(255,255,255,0.04); border-radius: 8px; color: rgba(250,250,250,0.45); font-size: 0.8rem; text-align: center; padding: 0.75rem; }
+  .demo-hero-title { font-size: 1.35rem; font-weight: 650; letter-spacing: -0.03em; line-height: 1.25; margin: 0 0 0.5rem 0; color: #fff; }
+  .demo-compare-wrap { margin-top: 0.5rem; }
 </style>
         """,
         unsafe_allow_html=True,
@@ -125,10 +123,11 @@ def main():
     )
     _inject_demo_styles()
 
-    st.title("Product recommendations")
+    st.markdown('<p class="demo-hero-title">Product recommendations</p>', unsafe_allow_html=True)
     st.markdown(
-        "Pick a shopping story, see **what they bought next**, and compare with **what the model suggests**. "
-        "Use the sidebar to load the model when you want new suggestions."
+        '<p class="demo-lead">Choose an example below. On the left you’ll see <strong>what the customer bought next</strong>; '
+        "on the right, <strong>what the model suggested</strong>. Load the model in the sidebar to create fresh suggestions.</p>",
+        unsafe_allow_html=True,
     )
 
     catalog = _title_catalog()
@@ -138,13 +137,14 @@ def main():
     )
 
     with st.sidebar:
-        st.header("Recommendation model")
-        st.caption("Load your trained model file to generate new suggestions for any example.")
+        st.header("Model")
+        st.caption("Load your trained file to run **Get new suggestions** on any example.")
         default_ckpt = REPO_ROOT / "output" / "model" / "finetuned-gpt2-medium-sft.pth"
+        st.caption("Trained weights file (.pth)")
         ckpt_input = st.text_input(
             "Model file",
             value=str(default_ckpt),
-            help="Trained weights saved after running the training script.",
+            label_visibility="collapsed",
         )
 
         if (
@@ -166,7 +166,7 @@ def main():
             st.success("Model loaded.")
         err = st.session_state.pop("_demo_auto_load_error", None)
         if err:
-            st.warning(f"Could not load automatically. Try the button below.\n{err}")
+            st.warning(f"Could not load automatically. Try the button below. ({err})")
 
         if st.button("Load / reload model", use_container_width=True):
             try:
@@ -177,11 +177,9 @@ def main():
                 if ok:
                     st.success("Model ready.")
                 else:
-                    st.warning(
-                        "Model file not found — using a generic base. Add your trained file for real suggestions."
-                    )
+                    st.warning("File not found — using base model only until you add the trained file.")
             except Exception as e:
-                st.error(f"Failed: {e}")
+                st.error(f"Error: {e}")
                 st.session_state.pop("bundle", None)
 
         st.divider()
@@ -196,49 +194,44 @@ def main():
     with tab_gallery:
         if not examples:
             st.error(
-                "No examples with product photos were found. "
-                "Check that images exist under `data/processed/image_cache/` and paths in `processed_data.jsonl` are valid."
+                "No examples with product photos were found. Check that images exist under data/processed/image_cache/ "
+                "and paths in processed_data.jsonl are correct."
             )
         else:
-            from src.demo.item_cards import build_item_cards, render_item_cards_streamlit
-
             def _example_label(i: int) -> str:
                 title = examples[i].get("title") or "Product"
                 tail = "…" if len(title) > 76 else ""
                 return f"{i + 1}. {title[:76]}{tail}"
 
             labels = [_example_label(i) for i in range(len(examples))]
-            st.caption("**1 · Pick a story**")
             idx = st.selectbox(
-                "Choose an example",
+                "Pick an example",
                 range(len(examples)),
                 format_func=lambda i: labels[i],
             )
             ex = examples[idx]
 
-            st.markdown("---")
-            st.caption("**2 · Product they’re considering**")
+            with st.container(border=True):
+                img_c, text_c = st.columns([1, 2], gap="large")
+                with img_c:
+                    st.caption("They viewed this")
+                    local_p = _anchor_image_path(ex)
+                    if local_p is not None:
+                        st.image(str(local_p), use_container_width=True)
+                    elif ex.get("image_url"):
+                        st.image(ex["image_url"], use_container_width=True)
+                    else:
+                        st.info("No photo for this product.")
+                    st.metric("Rating", f"{ex.get('rating', '—')} ★" if ex.get("rating") is not None else "—")
+                with text_c:
+                    st.subheader(ex.get("title") or "Product")
+                    if ex.get("main_category"):
+                        st.caption(ex["main_category"])
+                    if ex.get("review_title"):
+                        st.caption(f'Customer review: "{ex["review_title"]}"')
 
-            img_col, text_col = st.columns([1, 1.85], gap="large")
-            with img_col:
-                local_p = _anchor_image_path(ex)
-                if local_p is not None:
-                    st.image(str(local_p), use_container_width=True)
-                elif ex.get("image_url"):
-                    st.image(ex["image_url"], use_container_width=True)
-                else:
-                    st.markdown('<div class="demo-no-photo">No photo</div>', unsafe_allow_html=True)
-                st.metric("Rating", f"{ex.get('rating', '—')} ★" if ex.get("rating") is not None else "—")
-            with text_col:
-                cat = ex.get("main_category") or ""
-                if cat:
-                    st.caption(cat)
-                st.markdown(f"## {ex.get('title') or 'Product'}")
-                if ex.get("review_title"):
-                    st.markdown(f"> *{ex['review_title']}*")
-
-            st.markdown("---")
-            st.caption("**3 · What happened next**")
+            st.markdown('<div class="demo-compare-wrap"></div>', unsafe_allow_html=True)
+            from src.demo.item_cards import build_item_cards, render_item_cards_streamlit
 
             gt = ex.get("output") or ""
             cached = (ex.get("model_response") or "").strip()
@@ -252,21 +245,23 @@ def main():
                 if live_s:
                     render_item_cards_streamlit(
                         build_item_cards(live_s, None, catalog, REPO_ROOT),
-                        "What we’d suggest · just generated",
+                        "What the model suggests (new run)",
                     )
                 elif cached:
                     render_item_cards_streamlit(
                         build_item_cards(cached, None, catalog, REPO_ROOT),
-                        "What we’d suggest",
+                        "What the model suggested",
                     )
                 else:
-                    st.markdown("#### What we’d suggest")
+                    st.markdown('<p class="demo-rail-title">What the model suggests</p>', unsafe_allow_html=True)
                     st.info(
-                        "Load the model in the sidebar, then use the button below to generate suggestions for this example."
+                        "No saved suggestion for this one. Load the model in the sidebar, then use the button below."
                     )
 
             bundle = st.session_state.get("bundle")
-            if bundle and st.button("Generate suggestions for this example", key=f"regen_{idx}"):
+            if bundle and st.button(
+                "Get new suggestions from the model", key=f"regen_{idx}", use_container_width=True
+            ):
                 model, tokenizer, special_chars, end_id, base_cfg, config, _ok = bundle
                 from src.demo.inference import generate_recommendations
 
@@ -294,7 +289,8 @@ def main():
 
     with tab_custom:
         st.markdown(
-            "Describe a shopper and product the same way as in the examples. The model must already be loaded in the sidebar."
+            '<p class="demo-lead">Describe a shopper and product the same way as in the examples, then get suggestions.</p>',
+            unsafe_allow_html=True,
         )
         default_instr = (
             examples[0].get("instruction", "")
@@ -302,17 +298,14 @@ def main():
             else "Given a user purchased an item with the following details, predict the next 5 items the user would purchase. "
         )
         instr = st.text_area("Instructions for the model", value=default_instr, height=88)
-        user_input = st.text_area(
-            "Shopper and product details",
-            value=examples[0]["input"] if examples else "",
-            height=140,
-        )
+        user_input = st.text_area("Shopper and product", value=examples[0]["input"] if examples else "", height=140)
         bundle = st.session_state.get("bundle")
-        if st.button("Get suggestions", disabled=bundle is None):
-            from src.demo.item_cards import build_item_cards, render_item_cards_streamlit
+        go = st.button("Get suggestions", disabled=bundle is None, use_container_width=True)
+        if go and bundle:
+            model, tokenizer, special_chars, end_id, base_cfg, config, _ok = bundle
             from src.demo.inference import generate_recommendations
+            from src.demo.item_cards import build_item_cards, render_item_cards_streamlit
 
-            model, tokenizer, special_chars, end_id, base_cfg, config, ok = bundle
             device = str(next(model.parameters()).device)
             entry = {"instruction": instr, "input": user_input}
             with st.spinner("Working…"):
@@ -329,15 +322,15 @@ def main():
                     )
                     render_item_cards_streamlit(
                         build_item_cards(out, None, catalog, REPO_ROOT),
-                        "Suggestions",
+                        "Suggested next products",
                     )
                 except Exception as e:
                     st.error(str(e))
         elif bundle is None:
-            st.info("Open the sidebar and load the recommendation model first.")
+            st.info("Load the model in the sidebar first.")
 
     st.divider()
-    st.caption("MM-GPT2Rec · research demo")
+    st.caption("Recommendation research demo.")
 
 
 if __name__ == "__main__":
