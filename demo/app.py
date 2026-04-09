@@ -21,6 +21,26 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 
+def _inject_demo_styles() -> None:
+    st.markdown(
+        """
+<style>
+  .demo-no-photo {
+    min-height: 140px; display: flex; align-items: center; justify-content: center;
+    border-radius: 10px; margin-bottom: 0.5rem; font-size: 0.88rem;
+    border: 1px dashed rgba(128,128,128,0.35); color: rgba(128,128,128,0.85);
+  }
+  .demo-stop-card {
+    min-height: 100px; display: flex; align-items: center; justify-content: center;
+    border-radius: 10px; margin-bottom: 0.5rem; font-weight: 600; font-size: 0.95rem;
+    border: 1px solid rgba(99, 102, 241, 0.35); color: inherit;
+  }
+</style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def _gallery_file_fingerprint() -> Tuple[float, float]:
     proc = REPO_ROOT / "data" / "processed"
     jl = proc / "processed_data.jsonl"
@@ -31,7 +51,7 @@ def _gallery_file_fingerprint() -> Tuple[float, float]:
     )
 
 
-@st.cache_data(show_spinner="Loading shopping examples…")
+@st.cache_data(show_spinner="Loading examples…")
 def _cached_gallery_examples(
     repo_root_str: str,
     jsonl_mtime: float,
@@ -48,7 +68,7 @@ def _cached_gallery_examples(
     )
 
 
-@st.cache_data(show_spinner="Loading product catalog…")
+@st.cache_data(show_spinner="Loading catalog…")
 def _title_catalog() -> Dict[str, str]:
     path = REPO_ROOT / "data" / "processed" / "parent_asin_title.json"
     if not path.is_file():
@@ -69,9 +89,8 @@ def _checkpoint_mtime(path_str: str) -> float:
     return 0.0
 
 
-@st.cache_resource(show_spinner="Loading language model (first run may download weights)…")
+@st.cache_resource(show_spinner="Loading recommendation model…")
 def _load_inference_bundle(checkpoint_path_str: str, checkpoint_mtime: float):
-    """checkpoint_mtime busts the cache when the file is replaced after retraining."""
     from src.demo.inference import build_model_for_demo, load_fine_tuned_weights
     from src.utils.utils import load_config
 
@@ -85,23 +104,6 @@ def _load_inference_bundle(checkpoint_path_str: str, checkpoint_mtime: float):
     if ckpt.is_file():
         load_fine_tuned_weights(model, ckpt, str(device))
     return model, tokenizer, special_chars, end_id, base_cfg, config, ckpt.is_file()
-
-
-def _resolve_rows(tokens: List[str], catalog: Dict[str, str]) -> List[Tuple[str, str]]:
-    from src.demo.catalog import resolve_tokens
-
-    return resolve_tokens(tokens, catalog)
-
-
-def _token_table(rows: List[Tuple[str, str]], title: str) -> None:
-    st.markdown(f"**{title}**")
-    if not rows:
-        st.caption("No structured tokens found.")
-        return
-    for i, (tok, name) in enumerate(rows, start=1):
-        st.markdown(f"{i}. `{name}`")
-        if tok != name and tok != "<|endoftext|>":
-            st.caption(tok)
 
 
 def _anchor_image_path(ex: Dict[str, Any]) -> Optional[Path]:
@@ -121,13 +123,12 @@ def main():
         layout="wide",
         initial_sidebar_state="expanded",
     )
+    _inject_demo_styles()
 
     st.title("Product recommendations")
     st.markdown(
-        """
-Pick a **real shopping moment** (we only show products that already have a photo on disk).  
-See **what the customer bought next** in the data, compare to **our model’s suggestions**, or run the model live after loading it in the sidebar.
-        """.strip()
+        "Pick a shopping story, see **what they bought next**, and compare with **what the model suggests**. "
+        "Use the sidebar to load the model when you want new suggestions."
     )
 
     catalog = _title_catalog()
@@ -138,17 +139,14 @@ See **what the customer bought next** in the data, compare to **our model’s su
 
     with st.sidebar:
         st.header("Recommendation model")
-        st.caption(
-            "After training, your model file is loaded here so you can generate fresh suggestions."
-        )
+        st.caption("Load your trained model file to generate new suggestions for any example.")
         default_ckpt = REPO_ROOT / "output" / "model" / "finetuned-gpt2-medium-sft.pth"
         ckpt_input = st.text_input(
-            "Trained model file",
+            "Model file",
             value=str(default_ckpt),
-            help="Usually output/model/finetuned-gpt2-medium-sft.pth after training.",
+            help="Trained weights saved after running the training script.",
         )
 
-        # Use your trained weights as soon as the file exists (no extra click).
         if (
             st.session_state.get("bundle") is None
             and Path(ckpt_input).is_file()
@@ -165,129 +163,110 @@ See **what the customer bought next** in the data, compare to **our model’s su
                 st.session_state["_demo_auto_load_error"] = str(e)
 
         if st.session_state.pop("_demo_auto_loaded", False):
-            st.success("Loaded your trained model automatically.")
+            st.success("Model loaded.")
         err = st.session_state.pop("_demo_auto_load_error", None)
         if err:
-            st.warning(f"Auto-load failed (use the button to retry): {err}")
+            st.warning(f"Could not load automatically. Try the button below.\n{err}")
 
-        if st.button("Load / reload recommendation model"):
+        if st.button("Load / reload model", use_container_width=True):
             try:
                 bundle = _load_inference_bundle(ckpt_input, _checkpoint_mtime(ckpt_input))
                 st.session_state["bundle"] = bundle
                 st.session_state.pop("_demo_auto_fail_path", None)
                 _, _, _, _, _, _, ok = bundle
                 if ok:
-                    st.success("Trained model loaded.")
+                    st.success("Model ready.")
                 else:
                     st.warning(
-                        "Trained model file not found — running a generic base model only, "
-                        "so suggestions won’t match your trained system until you add the file."
+                        "Model file not found — using a generic base. Add your trained file for real suggestions."
                     )
             except Exception as e:
-                st.error(f"Failed to load model: {e}")
+                st.error(f"Failed: {e}")
                 st.session_state.pop("bundle", None)
 
         st.divider()
-        if st.button("Reload shopping examples from disk"):
+        if st.button("Refresh example list", use_container_width=True):
             _cached_gallery_examples.clear()
             st.rerun()
 
-        st.caption(
-            f"**{len(examples)}** shopping moments with photos · **{len(catalog):,}** product names in the catalog"
-        )
-        with st.expander("Technical details"):
-            st.caption(f"Data folder: `{REPO_ROOT / 'data' / 'processed'}`")
+        st.caption(f"{len(examples)} examples · {len(catalog):,} products in catalog")
 
     tab_gallery, tab_custom = st.tabs(["Examples", "Try your own"])
 
     with tab_gallery:
         if not examples:
             st.error(
-                "No examples with a saved product image were found. "
-                "Ensure `data/processed/processed_data.jsonl` lists `local_image_path` and those image files exist under `data/processed/image_cache/`."
+                "No examples with product photos were found. "
+                "Check that images exist under `data/processed/image_cache/` and paths in `processed_data.jsonl` are valid."
             )
         else:
+            from src.demo.item_cards import build_item_cards, render_item_cards_streamlit
+
             def _example_label(i: int) -> str:
                 title = examples[i].get("title") or "Product"
-                tail = "…" if len(title) > 72 else ""
-                return f"{i + 1}. {title[:72]}{tail}"
+                tail = "…" if len(title) > 76 else ""
+                return f"{i + 1}. {title[:76]}{tail}"
 
             labels = [_example_label(i) for i in range(len(examples))]
-            idx = st.selectbox("Choose an example", range(len(examples)), format_func=lambda i: labels[i])
+            st.caption("**1 · Pick a story**")
+            idx = st.selectbox(
+                "Choose an example",
+                range(len(examples)),
+                format_func=lambda i: labels[i],
+            )
             ex = examples[idx]
 
-            c1, c2 = st.columns([1, 2])
-            with c1:
-                st.caption("Product they’re looking at")
+            st.markdown("---")
+            st.caption("**2 · Product they’re considering**")
+
+            img_col, text_col = st.columns([1, 1.85], gap="large")
+            with img_col:
                 local_p = _anchor_image_path(ex)
                 if local_p is not None:
                     st.image(str(local_p), use_container_width=True)
                 elif ex.get("image_url"):
                     st.image(ex["image_url"], use_container_width=True)
                 else:
-                    st.info("No image for this product.")
-                st.metric("Star rating", ex.get("rating", "—"))
-                st.caption(f"**{ex.get('main_category', '—')}**")
-            with c2:
-                st.subheader(ex.get("title") or "Product")
+                    st.markdown('<div class="demo-no-photo">No photo</div>', unsafe_allow_html=True)
+                st.metric("Rating", f"{ex.get('rating', '—')} ★" if ex.get("rating") is not None else "—")
+            with text_col:
+                cat = ex.get("main_category") or ""
+                if cat:
+                    st.caption(cat)
+                st.markdown(f"## {ex.get('title') or 'Product'}")
                 if ex.get("review_title"):
-                    st.caption(f"What they said: *{ex['review_title']}*")
-                with st.expander("Details shown to the model (for developers)"):
-                    st.code(
-                        (ex.get("instruction") or "") + "\n" + (ex.get("input") or ""),
-                        language="text",
-                    )
+                    st.markdown(f"> *{ex['review_title']}*")
 
-            st.divider()
-            from src.demo.catalog import parse_prediction_tokens
-            from src.demo.item_cards import build_item_cards, render_item_cards_streamlit
+            st.markdown("---")
+            st.caption("**3 · What happened next**")
 
             gt = ex.get("output") or ""
             cached = (ex.get("model_response") or "").strip()
             gt_cards = build_item_cards(gt, ex.get("output_names"), catalog, REPO_ROOT)
 
-            g1, g2 = st.columns(2)
-            with g1:
-                render_item_cards_streamlit(
-                    gt_cards,
-                    "What they bought next (from purchase history)",
-                )
-                with st.expander("For developers: internal product codes"):
-                    _token_table(
-                        _resolve_rows(parse_prediction_tokens(gt), catalog),
-                        "Codes",
-                    )
-            with g2:
+            left, right = st.columns(2, gap="large")
+            with left:
+                render_item_cards_streamlit(gt_cards, "What they bought next")
+            with right:
                 live_s = (st.session_state.get(f"live_{idx}") or "").strip()
                 if live_s:
                     render_item_cards_streamlit(
                         build_item_cards(live_s, None, catalog, REPO_ROOT),
-                        "Our model’s suggestions (just generated)",
+                        "What we’d suggest · just generated",
                     )
-                    with st.expander("For developers: internal product codes"):
-                        _token_table(
-                            _resolve_rows(parse_prediction_tokens(live_s), catalog),
-                            "Codes",
-                        )
                 elif cached:
                     render_item_cards_streamlit(
                         build_item_cards(cached, None, catalog, REPO_ROOT),
-                        "Our model’s suggestions (from an earlier run)",
+                        "What we’d suggest",
                     )
-                    with st.expander("For developers: internal product codes"):
-                        _token_table(
-                            _resolve_rows(parse_prediction_tokens(cached), catalog),
-                            "Codes",
-                        )
                 else:
-                    st.markdown("##### Our model’s suggestions")
+                    st.markdown("#### What we’d suggest")
                     st.info(
-                        "There’s no saved suggestion for this example. "
-                        "Load the recommendation model in the sidebar, then click **Get new suggestions** below."
+                        "Load the model in the sidebar, then use the button below to generate suggestions for this example."
                     )
 
             bundle = st.session_state.get("bundle")
-            if bundle and st.button("Get new suggestions", key=f"regen_{idx}"):
+            if bundle and st.button("Generate suggestions for this example", key=f"regen_{idx}"):
                 model, tokenizer, special_chars, end_id, base_cfg, config, _ok = bundle
                 from src.demo.inference import generate_recommendations
 
@@ -296,7 +275,7 @@ See **what the customer bought next** in the data, compare to **our model’s su
                     "instruction": ex.get("instruction", ""),
                     "input": ex.get("input", ""),
                 }
-                with st.spinner("Generating…"):
+                with st.spinner("Working…"):
                     try:
                         live = generate_recommendations(
                             model,
@@ -309,32 +288,34 @@ See **what the customer bought next** in the data, compare to **our model’s su
                             device,
                         )
                         st.session_state[f"live_{idx}"] = live
+                        st.rerun()
                     except Exception as e:
                         st.error(str(e))
 
     with tab_custom:
         st.markdown(
-            "Advanced: paste the **scenario text** your model expects (same format as in the examples — product and shopper details)."
+            "Describe a shopper and product the same way as in the examples. The model must already be loaded in the sidebar."
         )
         default_instr = (
             examples[0].get("instruction", "")
             if examples
             else "Given a user purchased an item with the following details, predict the next 5 items the user would purchase. "
         )
-        instr = st.text_area("Task wording", value=default_instr, height=100)
+        instr = st.text_area("Instructions for the model", value=default_instr, height=88)
         user_input = st.text_area(
-            "Scenario (shopper + product)",
+            "Shopper and product details",
             value=examples[0]["input"] if examples else "",
-            height=160,
+            height=140,
         )
         bundle = st.session_state.get("bundle")
         if st.button("Get suggestions", disabled=bundle is None):
-            model, tokenizer, special_chars, end_id, base_cfg, config, ok = bundle
+            from src.demo.item_cards import build_item_cards, render_item_cards_streamlit
             from src.demo.inference import generate_recommendations
 
+            model, tokenizer, special_chars, end_id, base_cfg, config, ok = bundle
             device = str(next(model.parameters()).device)
             entry = {"instruction": instr, "input": user_input}
-            with st.spinner("Generating…"):
+            with st.spinner("Working…"):
                 try:
                     out = generate_recommendations(
                         model,
@@ -346,23 +327,17 @@ See **what the customer bought next** in the data, compare to **our model’s su
                         config["training_config"],
                         device,
                     )
-                    from src.demo.catalog import parse_prediction_tokens
-                    from src.demo.item_cards import build_item_cards, render_item_cards_streamlit
-
                     render_item_cards_streamlit(
                         build_item_cards(out, None, catalog, REPO_ROOT),
-                        "Suggested next products",
+                        "Suggestions",
                     )
-                    with st.expander("For developers: raw model output"):
-                        st.code(out, language="text")
-                    _token_table(_resolve_rows(parse_prediction_tokens(out), catalog), "Codes")
                 except Exception as e:
                     st.error(str(e))
         elif bundle is None:
-            st.info("Load the recommendation model in the sidebar first, then you can get suggestions here.")
+            st.info("Open the sidebar and load the recommendation model first.")
 
     st.divider()
-    st.caption("Research demo — MM-GPT2Rec (multimodal product recommendations).")
+    st.caption("MM-GPT2Rec · research demo")
 
 
 if __name__ == "__main__":

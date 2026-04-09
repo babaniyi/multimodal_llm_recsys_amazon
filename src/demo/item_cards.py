@@ -1,4 +1,4 @@
-"""Map recommendation strings to user-friendly titles + local cache images."""
+"""Map recommendation strings to human-friendly titles and local product images."""
 
 from __future__ import annotations
 
@@ -27,10 +27,6 @@ def build_item_cards(
     catalog: Dict[str, str],
     repo_root: Path,
 ) -> List[Dict[str, Any]]:
-    """
-    One card per token in `output` (ASIN specials + <|endoftext|>).
-    Images: data/processed/image_cache/{ASIN}.jpg when present (same layout as dataset).
-    """
     tokens = parse_prediction_tokens(output)
     names = parse_output_name_list(output_names)
     cache_dir = repo_root / "data" / "processed" / "image_cache"
@@ -40,14 +36,15 @@ def build_item_cards(
             cards.append(
                 {
                     "token": tok,
-                    "title": "(No further purchase in this horizon)",
+                    "title": "No further purchase in this period",
                     "image_path": None,
                     "has_image": False,
                     "asin_code": None,
+                    "is_stop": True,
                 }
             )
             continue
-        title = names[i] if i < len(names) else catalog.get(tok, "Title not in catalog")
+        title = names[i] if i < len(names) else catalog.get(tok, "Product")
         code = asin_code_from_special_token(tok)
         img_path: Optional[Path] = None
         has_img = False
@@ -63,6 +60,7 @@ def build_item_cards(
                 "image_path": img_path,
                 "has_image": has_img,
                 "asin_code": code,
+                "is_stop": False,
             }
         )
     return cards
@@ -71,21 +69,30 @@ def build_item_cards(
 def render_item_cards_streamlit(cards: List[Dict[str, Any]], heading: str) -> None:
     import streamlit as st
 
-    st.markdown(f"##### {heading}")
+    st.markdown(f"#### {heading}")
     if not cards:
-        st.caption("Nothing to show.")
+        st.caption("Nothing to show for this example.")
         return
     chunk_size = 5
     for start in range(0, len(cards), chunk_size):
         chunk = cards[start : start + chunk_size]
-        cols = st.columns(len(chunk))
+        cols = st.columns(len(chunk), gap="small")
         for col, card in zip(cols, chunk):
             with col:
-                if card.get("has_image") and card.get("image_path"):
+                if card.get("is_stop"):
+                    st.markdown(
+                        '<div class="demo-stop-card">Done shopping</div>',
+                        unsafe_allow_html=True,
+                    )
+                    st.caption(card.get("title", ""))
+                elif card.get("has_image") and card.get("image_path"):
                     st.image(str(card["image_path"]), use_container_width=True)
-                elif card["token"].strip() != "<|endoftext|>":
-                    st.caption("No local image")
-                title = card.get("title") or ""
-                short = title if len(title) <= 100 else title[:97] + "…"
-                st.markdown(f"**{short}**")
-                st.caption(card.get("token", ""))
+                else:
+                    st.markdown(
+                        '<div class="demo-no-photo">No photo</div>',
+                        unsafe_allow_html=True,
+                    )
+                title = (card.get("title") or "").strip()
+                if title and not card.get("is_stop"):
+                    short = title if len(title) <= 110 else title[:107] + "…"
+                    st.markdown(f"**{short}**")
