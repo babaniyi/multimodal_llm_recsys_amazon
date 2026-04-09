@@ -28,6 +28,8 @@ def build_item_cards(
     output_names: Optional[str],
     catalog: Dict[str, str],
     repo_root: Path,
+    *,
+    product_categories_by_asin_token: Optional[Dict[str, str]] = None,
 ) -> List[Dict[str, Any]]:
     tokens = parse_prediction_tokens(output)
     names = parse_output_name_list(output_names)
@@ -43,6 +45,7 @@ def build_item_cards(
                     "image_path": None,
                     "has_image": False,
                     "asin_code": None,
+                    "product_category": None,
                 }
             )
             continue
@@ -56,6 +59,10 @@ def build_item_cards(
             if candidate.is_file():
                 img_path = candidate
                 has_img = True
+        tkey = tok.strip()
+        pcat = None
+        if product_categories_by_asin_token:
+            pcat = product_categories_by_asin_token.get(tkey)
         cards.append(
             {
                 "token": tok,
@@ -64,6 +71,7 @@ def build_item_cards(
                 "image_path": img_path,
                 "has_image": has_img,
                 "asin_code": code,
+                "product_category": pcat,
             }
         )
     return cards
@@ -81,6 +89,9 @@ def render_one_card_streamlit(card: Dict[str, Any]) -> None:
             f'<p class="demo-card-title">{html.escape(short)}</p>',
             unsafe_allow_html=True,
         )
+        cat = card.get("product_category")
+        if cat:
+            st.caption(f"Category: {cat}")
         sub = card.get("subtitle")
         if sub:
             st.caption(sub)

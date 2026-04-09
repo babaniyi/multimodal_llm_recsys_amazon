@@ -47,6 +47,24 @@ def _gallery_file_fingerprint() -> Tuple[float, float]:
     )
 
 
+def _category_map_fingerprint() -> float:
+    """Max mtime of files used to build ASIN → category lookup."""
+    proc = REPO_ROOT / "data" / "processed"
+    m = 0.0
+    for name in ("processed_data.jsonl", "train.json", "val.json", "test.json"):
+        p = proc / name
+        if p.is_file():
+            m = max(m, p.stat().st_mtime)
+    return m
+
+
+@st.cache_data(show_spinner=False)
+def _cached_asin_category_map(_category_sources_mtime: float) -> Dict[str, str]:
+    from src.demo.asin_categories import load_parent_asin_category_map
+
+    return load_parent_asin_category_map(REPO_ROOT)
+
+
 @st.cache_data(show_spinner="Loading examples…")
 def _cached_gallery_examples(
     repo_root_str: str,
@@ -131,6 +149,7 @@ def main():
 
     catalog = _title_catalog()
     jl_mt, test_mt = _gallery_file_fingerprint()
+    category_map = _cached_asin_category_map(_category_map_fingerprint())
     examples = _cached_gallery_examples(
         str(REPO_ROOT), jl_mt, test_mt, max_examples=36, seed=42
     )
@@ -239,12 +258,26 @@ def main():
 
             gt = ex.get("output") or ""
             cached = (ex.get("model_response") or "").strip()
-            gt_cards = build_item_cards(gt, ex.get("output_names"), catalog, REPO_ROOT)
+            gt_cards = build_item_cards(
+                gt,
+                ex.get("output_names"),
+                catalog,
+                REPO_ROOT,
+                product_categories_by_asin_token=category_map,
+            )
 
             live_s = (st.session_state.get(f"live_{idx}") or "").strip()
             pred_text = live_s if live_s else cached
             pred_cards = (
-                build_item_cards(pred_text, None, catalog, REPO_ROOT) if pred_text else []
+                build_item_cards(
+                    pred_text,
+                    None,
+                    catalog,
+                    REPO_ROOT,
+                    product_categories_by_asin_token=category_map,
+                )
+                if pred_text
+                else []
             )
 
             right_title = (
@@ -322,7 +355,13 @@ def main():
                         device,
                     )
                     render_item_cards_streamlit(
-                        build_item_cards(out, None, catalog, REPO_ROOT),
+                        build_item_cards(
+                            out,
+                            None,
+                            catalog,
+                            REPO_ROOT,
+                            product_categories_by_asin_token=category_map,
+                        ),
                         "Suggested next products",
                     )
                 except Exception as e:
