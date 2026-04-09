@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from src.demo.catalog import parse_prediction_tokens
+from src.demo.thumbnails import show_uniform_card_image
 
 
 def asin_code_from_special_token(token: str) -> Optional[str]:
@@ -73,13 +74,7 @@ def render_one_card_streamlit(card: Dict[str, Any]) -> None:
     import streamlit as st
 
     with st.container(border=True):
-        if card.get("has_image") and card.get("image_path"):
-            st.image(str(card["image_path"]), use_container_width=True)
-        elif card["token"].strip() != "<|endoftext|>":
-            st.markdown(
-                '<div class="demo-img-placeholder">Photo not available</div>',
-                unsafe_allow_html=True,
-            )
+        show_uniform_card_image(st, card)
         title = card.get("title") or ""
         short = title if len(title) <= 110 else title[:107] + "…"
         st.markdown(

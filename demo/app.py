@@ -29,8 +29,6 @@ def _inject_demo_styles() -> None:
   .demo-rail-title { font-size: 1.05rem; font-weight: 600; letter-spacing: -0.02em; margin: 0 0 0.65rem 0;
     padding-bottom: 0.4rem; border-bottom: 1px solid rgba(250,250,250,0.12); color: #fafafa; }
   .demo-card-title { font-size: 0.82rem; font-weight: 500; line-height: 1.35; margin: 0.35rem 0 0 0; color: rgba(250,250,250,0.95); }
-  .demo-img-placeholder { min-height: 120px; display: flex; align-items: center; justify-content: center;
-    background: rgba(255,255,255,0.04); border-radius: 8px; color: rgba(250,250,250,0.45); font-size: 0.8rem; text-align: center; padding: 0.75rem; }
   .demo-hero-title { font-size: 1.35rem; font-weight: 650; letter-spacing: -0.03em; line-height: 1.25; margin: 0 0 0.5rem 0; color: #fff; }
   .demo-compare-wrap { margin-top: 0.5rem; }
 </style>
@@ -195,9 +193,9 @@ def main():
     with tab_gallery:
         if not examples:
             st.error(
-                "No examples are ready to show. You need rows in **processed_data.jsonl** with a valid **local_image_path** "
-                "and a matching entry in **test_with_responses.json** that includes **model_response**, so each example has "
-                "both the real next purchases and the model’s suggestions."
+                "No examples are ready to show. Each example needs: a product photo on disk, a saved **model_response**, "
+                "and **every** next-item ASIN (actual and suggested) must have a matching **.jpg** under "
+                "**data/processed/image_cache/** so all tiles can show images."
             )
         else:
             def _example_label(i: int) -> str:
@@ -217,13 +215,14 @@ def main():
                 img_c, text_c = st.columns([1, 2], gap="large")
                 with img_c:
                     st.caption("They viewed this")
+                    from src.demo.thumbnails import show_uniform_product_image
+
                     local_p = _anchor_image_path(ex)
-                    if local_p is not None:
-                        st.image(str(local_p), use_container_width=True)
-                    elif ex.get("image_url"):
-                        st.image(ex["image_url"], use_container_width=True)
-                    else:
-                        st.info("No photo for this product.")
+                    show_uniform_product_image(
+                        st,
+                        local_path=local_p,
+                        image_url=ex.get("image_url") if local_p is None else None,
+                    )
                     st.metric("Rating", f"{ex.get('rating', '—')} ★" if ex.get("rating") is not None else "—")
                 with text_c:
                     st.subheader(ex.get("title") or "Product")

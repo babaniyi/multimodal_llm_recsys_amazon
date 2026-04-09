@@ -8,12 +8,36 @@ from __future__ import annotations
 
 import json
 import random
+import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+from src.demo.catalog import parse_prediction_tokens
 
 
 def _dedupe_key(row: Dict[str, Any]) -> str:
     return f"{row.get('instruction', '')}|{row.get('input', '')}"
+
+
+def all_asin_slots_have_cache_images(response_text: str, repo_root: Path) -> bool:
+    """
+    True if response has at least one ASIN token and every ASIN has image_cache/{asin}.jpg.
+    <|endoftext|> slots are ignored.
+    """
+    if not (response_text or "").strip():
+        return False
+    cache = repo_root / "data" / "processed" / "image_cache"
+    saw_asin = False
+    for tok in parse_prediction_tokens(response_text):
+        if tok.strip() == "<|endoftext|>":
+            continue
+        m = re.match(r"<\|ASIN_([^|]+)\|>", tok.strip())
+        if not m:
+            return False
+        saw_asin = True
+        if not (cache / f"{m.group(1)}.jpg").is_file():
+            return False
+    return saw_asin
 
 
 def row_has_valid_local_image(row: Dict[str, Any], repo_root: Path) -> bool:
@@ -71,6 +95,9 @@ def load_gallery_examples(
     If require_model_suggestions (default True), only keep examples that have a non-empty
     saved model output in test_with_responses.json for the same scenario, so the gallery
     always shows actual vs suggested side by side.
+
+    Additionally, every ASIN in both the ground-truth ``output`` and the ``model_response``
+    must have a JPEG in ``data/processed/image_cache/`` so tiles can show photos everywhere.
     """
     proc = repo_root / "data" / "processed"
     jsonl_path = proc / "processed_data.jsonl"
@@ -93,6 +120,11 @@ def load_gallery_examples(
                 mr = str(mr).strip()
                 if require_model_suggestions and not mr:
                     continue
+                out = row.get("output") or ""
+                if not all_asin_slots_have_cache_images(out, repo_root):
+                    continue
+                if not all_asin_slots_have_cache_images(mr, repo_root):
+                    continue
                 by_key[k] = _to_example(row, model_response=mr if mr else None)
     else:
         demo = repo_root / "demo" / "demo_examples.json"
@@ -107,6 +139,11 @@ def load_gallery_examples(
                     continue
                 mr = (row.get("model_response") or "").strip()
                 if require_model_suggestions and not mr:
+                    continue
+                out = row.get("output") or ""
+                if not all_asin_slots_have_cache_images(out, repo_root):
+                    continue
+                if not all_asin_slots_have_cache_images(mr, repo_root):
                     continue
                 by_key[k] = _to_example(row)
 
