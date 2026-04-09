@@ -125,8 +125,9 @@ def main():
 
     st.markdown('<p class="demo-hero-title">Product recommendations</p>', unsafe_allow_html=True)
     st.markdown(
-        '<p class="demo-lead">Choose an example below. On the left you’ll see <strong>what the customer bought next</strong>; '
-        "on the right, <strong>what the model suggested</strong>. Load the model in the sidebar to create fresh suggestions.</p>",
+        '<p class="demo-lead">Each row compares <strong>what the customer bought next</strong> (left) with '
+        "<strong>what the model suggested</strong> (right) for the same spot in the list. "
+        "Examples below all include saved model suggestions. Load the model in the sidebar to refresh suggestions.</p>",
         unsafe_allow_html=True,
     )
 
@@ -194,8 +195,9 @@ def main():
     with tab_gallery:
         if not examples:
             st.error(
-                "No examples with product photos were found. Check that images exist under data/processed/image_cache/ "
-                "and paths in processed_data.jsonl are correct."
+                "No examples are ready to show. You need rows in **processed_data.jsonl** with a valid **local_image_path** "
+                "and a matching entry in **test_with_responses.json** that includes **model_response**, so each example has "
+                "both the real next purchases and the model’s suggestions."
             )
         else:
             def _example_label(i: int) -> str:
@@ -231,32 +233,32 @@ def main():
                         st.caption(f'Customer review: "{ex["review_title"]}"')
 
             st.markdown('<div class="demo-compare-wrap"></div>', unsafe_allow_html=True)
-            from src.demo.item_cards import build_item_cards, render_item_cards_streamlit
+            from src.demo.item_cards import (
+                build_item_cards,
+                render_horizontal_comparison_streamlit,
+            )
 
             gt = ex.get("output") or ""
             cached = (ex.get("model_response") or "").strip()
             gt_cards = build_item_cards(gt, ex.get("output_names"), catalog, REPO_ROOT)
 
-            left, right = st.columns(2, gap="large")
-            with left:
-                render_item_cards_streamlit(gt_cards, "What they bought next")
-            with right:
-                live_s = (st.session_state.get(f"live_{idx}") or "").strip()
-                if live_s:
-                    render_item_cards_streamlit(
-                        build_item_cards(live_s, None, catalog, REPO_ROOT),
-                        "What the model suggests (new run)",
-                    )
-                elif cached:
-                    render_item_cards_streamlit(
-                        build_item_cards(cached, None, catalog, REPO_ROOT),
-                        "What the model suggested",
-                    )
-                else:
-                    st.markdown('<p class="demo-rail-title">What the model suggests</p>', unsafe_allow_html=True)
-                    st.info(
-                        "No saved suggestion for this one. Load the model in the sidebar, then use the button below."
-                    )
+            live_s = (st.session_state.get(f"live_{idx}") or "").strip()
+            pred_text = live_s if live_s else cached
+            pred_cards = (
+                build_item_cards(pred_text, None, catalog, REPO_ROOT) if pred_text else []
+            )
+
+            right_title = (
+                "What the model suggests (just generated)"
+                if live_s
+                else "What the model suggested"
+            )
+            render_horizontal_comparison_streamlit(
+                gt_cards,
+                pred_cards,
+                left_heading="What they bought next",
+                right_heading=right_title,
+            )
 
             bundle = st.session_state.get("bundle")
             if bundle and st.button(

@@ -1,7 +1,7 @@
 """
-Load demo gallery rows from processed data: only examples with a real on-disk local image.
+Load demo gallery rows: on-disk product photo + saved model output when required.
 
-No train/val/test labels are attached — the UI treats them uniformly.
+No train/val/test labels — one unified list for the UI.
 """
 
 from __future__ import annotations
@@ -63,10 +63,14 @@ def load_gallery_examples(
     *,
     max_examples: int = 36,
     seed: int = 42,
+    require_model_suggestions: bool = True,
 ) -> List[Dict[str, Any]]:
     """
-    Prefer processed_data.jsonl (rows with a real local_image_path file).
-    If jsonl is missing, fall back to demo/demo_examples.json with the same image filter.
+    Rows from processed_data.jsonl with a real local_image_path file.
+
+    If require_model_suggestions (default True), only keep examples that have a non-empty
+    saved model output in test_with_responses.json for the same scenario, so the gallery
+    always shows actual vs suggested side by side.
     """
     proc = repo_root / "data" / "processed"
     jsonl_path = proc / "processed_data.jsonl"
@@ -85,8 +89,11 @@ def load_gallery_examples(
                 k = _dedupe_key(row)
                 if k in by_key:
                     continue
-                mr = responses.get(k)
-                by_key[k] = _to_example(row, model_response=mr)
+                mr = responses.get(k, "") or ""
+                mr = str(mr).strip()
+                if require_model_suggestions and not mr:
+                    continue
+                by_key[k] = _to_example(row, model_response=mr if mr else None)
     else:
         demo = repo_root / "demo" / "demo_examples.json"
         if demo.is_file():
@@ -97,6 +104,9 @@ def load_gallery_examples(
                     continue
                 k = _dedupe_key(row)
                 if k in by_key:
+                    continue
+                mr = (row.get("model_response") or "").strip()
+                if require_model_suggestions and not mr:
                     continue
                 by_key[k] = _to_example(row)
 
